@@ -11,7 +11,7 @@ const int ROWS = 10;
 const int COLS = 5;
 const int NB = 2 * ROWS + COLS - 2;   // outline points
 uniform vec2 cloth[50];                // grid points (row-major) in ghost-length units, relative to the head centre = quad centre
-uniform float quad_size = 2.4;         // quad side in ghost-length units
+uniform vec4 box = vec4(-1.2, -1.2, 2.4, 2.4); // drawn rect (x, y, w, h) in ghost-length units, relative to the head centre
 uniform float head_angle = -1.5708;    // direction the head is facing (screen space, radians)
 uniform float phase = 0.0;             // per-ghost time offset
 uniform float look = 0.0;              // -1..1, face glance left/right
@@ -72,7 +72,7 @@ float ellipse(vec2 p, vec2 c, vec2 r) {
 void fragment() {
 	float t = TIME * cloth_speed + phase;
 	float R = 0.13 * body_width;
-	vec2 p = (UV - 0.5) * quad_size;
+	vec2 p = box.xy + UV * box.zw;
 
 	// Slow ripples in the cloth, nothing at the head, strongest at the hem.
 	float far = clamp(length(p) / 0.8, 0.0, 1.0);

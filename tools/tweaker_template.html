@@ -395,11 +395,23 @@ class Ghost {
   }
   draw() {
     const pr = ghostProg, u = n => pr.u(n);
-    gl.uniform2f(u("u_center"), this.x, this.y); const quad = 2 * (f("body_length") * (1 + f("stretch")) + .35); gl.uniform2f(u("u_size"), quad * this.len, quad * this.len);
-    const sp = new Float32Array(NP * 2); for (let i = 0; i < NP; i++) { sp[i * 2] = (this.pts[i][0] - this.x) / this.len; sp[i * 2 + 1] = (this.pts[i][1] - this.y) / this.len; }
+    // Quad fitted to the cloth plus its halo, like _push_spine in ghost.gd.
+    const quad = 2 * (f("body_length") * (1 + f("stretch")) + .35), half = quad / 2, ca = Math.abs(f("cloth_amount"));
+    const reach = Math.log(Math.max(f("glow") * .35 * 1.5 * 1024, 1)) / 38 + .092 * ca + .03 + .015 * ca + .04;
+    const hr = .13 * this.pick("body_width");
+    let x0 = -hr, y0 = -hr, x1 = hr, y1 = hr;
+    const sp = new Float32Array(NP * 2); for (let i = 0; i < NP; i++) {
+      const qx = (this.pts[i][0] - this.x) / this.len, qy = (this.pts[i][1] - this.y) / this.len;
+      sp[i * 2] = qx; sp[i * 2 + 1] = qy;
+      x0 = Math.min(x0, qx); y0 = Math.min(y0, qy); x1 = Math.max(x1, qx); y1 = Math.max(y1, qy);
+    }
+    x0 = Math.max(x0 - reach, -half); y0 = Math.max(y0 - reach, -half); x1 = Math.min(x1 + reach, half); y1 = Math.min(y1 + reach, half);
+    gl.uniform2f(u("u_center"), this.x + (x0 + x1) / 2 * this.len, this.y + (y0 + y1) / 2 * this.len);
+    gl.uniform2f(u("u_size"), (x1 - x0) * this.len, (y1 - y0) * this.len);
+    gl.uniform4f(u("box"), x0, y0, x1 - x0, y1 - y0);
     gl.uniform2fv(u("cloth"), sp);
     const set = (n, v) => gl.uniform1f(u(n), v);
-    set("quad_size", quad); set("head_angle", this.headAngle); set("phase", this.phase);
+    set("head_angle", this.headAngle); set("phase", this.phase);
     set("look", Math.sin(this.t * .23 + this.phase) * f("look_amount"));
     set("blink", this.blinkT < 0 ? 0 : Math.sin(Math.PI * this.blinkT / Math.max(f("blink_duration"), .05)));
     const p = this.presence; set("presence", p * p * (3 - 2 * p));
@@ -467,6 +479,7 @@ function frame(now) {
     if (S.filter_on) {
       gl.uniform1i(pr.u("screen_tex"), 0); gl.uniform1f(pr.u("u_time"), time); gl.uniform2f(pr.u("u_px"), 1 / W, 1 / H);
       for (const [n, k] of [["bloom", "bloom"], ["bloom_radius", "bloom_radius"], ["grain", "grain"], ["aberration", "aberration"], ["flicker", "screen_flicker"], ["vignette", "vignette"], ["black_floor", "black_floor"]]) gl.uniform1f(pr.u(n), f(k));
+      gl.uniform1i(pr.u("lit_count"), -1);   // the preview filters every pixel
     } else gl.uniform1i(pr.u("tex"), 0);
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
   }
