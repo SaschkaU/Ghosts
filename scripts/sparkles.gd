@@ -1,8 +1,7 @@
 extends Node2D
 ## Little gold chalk crosses and dashes that twinkle and drift in the dark.
 
-@export var count := 26
-@export var color := Color(0.85, 0.66, 0.25)
+const S := preload("res://scripts/settings.gd")
 
 var _items: Array[Dictionary] = []
 var _t := 0.0
@@ -10,8 +9,8 @@ var _t := 0.0
 
 func setup(rng: RandomNumberGenerator, screen: Vector2) -> void:
 	_items.clear()
-	var unit := screen.y / 1080.0
-	for i in count:
+	var unit := screen.y / 1080.0 * S.f("sparkle_size")
+	for i in S.i("sparkle_count"):
 		_items.append({
 			"pos": Vector2(rng.randf() * screen.x, rng.randf() * screen.y),
 			"size": rng.randf_range(8.0, 22.0) * unit,
@@ -19,13 +18,13 @@ func setup(rng: RandomNumberGenerator, screen: Vector2) -> void:
 			"phase": rng.randf() * TAU,
 			"speed": rng.randf_range(0.3, 1.1),
 			"kind": rng.randi_range(0, 2),
-			"drift": Vector2(rng.randf_range(-4, 4), rng.randf_range(-6, 2)) * unit,
+			"drift": Vector2(rng.randf_range(-4, 4), rng.randf_range(-6, 2)) * screen.y / 1080.0,
 			"screen": screen,
 		})
 
 
 func _process(delta: float) -> void:
-	_t += delta
+	_t += delta * S.f("sparkle_speed")
 	for it in _items:
 		var p: Vector2 = it.pos + it.drift * delta
 		var s: Vector2 = it.screen
@@ -34,6 +33,7 @@ func _process(delta: float) -> void:
 
 
 func _draw() -> void:
+	var color := S.c("sparkle_color")
 	for it in _items:
 		var tw := 0.5 + 0.5 * sin(_t * it.speed + it.phase)
 		var a := pow(tw, 3.0)

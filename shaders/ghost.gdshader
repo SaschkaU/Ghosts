@@ -23,6 +23,8 @@ uniform float opacity = 0.92;
 uniform float tail_fade = 0.45;        // hem fades into the dark
 uniform float glow = 0.55;             // soft halo around the body
 uniform float flicker = 0.08;
+uniform float eye_size = 1.0;
+uniform float blush_amount = 0.9;
 
 uniform vec4 body_color : source_color = vec4(0.96, 0.93, 0.85, 1.0);
 uniform vec4 rim_color : source_color = vec4(0.82, 0.38, 0.55, 1.0);
@@ -139,8 +141,8 @@ void fragment() {
 	vec2 right = vec2(-fwd.y, fwd.x);
 	vec2 hq = vec2(dot(q, right), -dot(q, fwd));
 	vec2 face = vec2(look * 0.045 * body_width, 0.015);
-	float eye_open = mix(1.0, 0.12, blink);
-	vec2 eye_r = vec2(0.014, 0.021 * eye_open) * body_width;
+	float eye_open = mix(1.0, 0.06, blink);
+	vec2 eye_r = vec2(0.014, 0.021 * eye_open) * body_width * eye_size;
 	float ex = 0.043 * body_width;
 	float eyes = min(ellipse(hq, face + vec2(-ex, 0.0), eye_r),
 					 ellipse(hq, face + vec2(ex, 0.0), eye_r));
@@ -151,11 +153,11 @@ void fragment() {
 	float blush = min(ellipse(hq, face + vec2(-bx, 0.042 * body_width), bl_r),
 					  ellipse(hq, face + vec2(bx, 0.042 * body_width), bl_r));
 	float scribble = 0.55 + 0.45 * sin((hq.x + hq.y) * 900.0 + vnoise(hq * 80.0) * 6.0);
-	col = mix(col, blush_color.rgb, (1.0 - smoothstep(-0.3, 0.1, blush)) * scribble * 0.9);
+	col = mix(col, blush_color.rgb, (1.0 - smoothstep(-0.3, 0.1, blush)) * scribble * blush_amount);
 
 	// Appear / vanish: a smoky dissolve, head first, hem last, with a glowing edge.
-	float n = fbm(p * 2.5 + phase * 3.1) * 0.3 + s_body * 0.75;
-	float pres = smoothstep(n - 0.1, n + 0.1, presence * 1.3 - 0.1);
+	float n = fbm(p * 4.0 + phase * 3.1 + vec2(0.0, TIME * 0.15)) * 0.4 + s_body * 0.7;
+	float pres = smoothstep(n - 0.16, n + 0.16, presence * 1.4 - 0.2);
 	float ecto = pres * (1.0 - pres) * 4.0 * step(0.001, presence) * step(presence, 0.999);
 
 	// Spooky: translucent, fading hem, subtle shimmer and flicker.

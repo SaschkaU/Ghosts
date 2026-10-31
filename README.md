@@ -22,6 +22,7 @@ no sprite images to manage.
 | `S` | Move to the next screen |
 | `Up` / `Down` | Add / remove a ghost (they fade in and out) |
 | `P` | Spooky screen filter on / off |
+| `R` | Reload `ghost_settings.json` |
 | `H` | Show / hide the help line |
 | `Esc` / `Q` | Quit |
 
@@ -44,10 +45,13 @@ export templates the first time.
 
 ### Tuning the look
 
-The cloth feel is set at the top of `scripts/ghost.gd`: `stiffness`,
-`stretch`, `keep_velocity` (more = more drag, swing and follow-through),
-`flutter`, and the big slow underwater undulation `wave_amount` / `wave_speed`.
+Every value (population, fades, movement, cloth, face and blinking, colours,
+sparkles, screen filter) lives in `ghost_settings.json`. The easiest way to tune
+it is the **Ghost Tweaker** page, a live browser copy of the app with a slider
+for everything: open `tools/ghost_tweaker.html` in a browser, press
+**Copy settings JSON**, paste it into `ghost_settings.json`, and press `R` in
+the running app.
 
-The look is set by the defaults at the top of `shaders/ghost.gdshader`
-(`cloth_amount`, `cloth_speed`, `flare`, `scallops`, `tail_fade`, `glow`, colours)
-and the random ranges in `setup()` in `scripts/ghost.gd`.
+The defaults (and what each key means) are in `scripts/settings.gd`. The
+tweaker uses the same shaders as the app; after changing a shader or a default,
+rebuild it with `python3 tools/build_tweaker.py`.
