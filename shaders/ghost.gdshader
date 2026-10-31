@@ -1,0 +1,202 @@
+// One ghost, drawn procedurally.
+// The body is a real piece of simulated cloth: scripts/ghost.gd runs a
+// mass-spring grid (ROWS x COLS particles) hanging off the head, and this
+// shader draws the outline of that grid (left edge, hem, right edge) as a
+// smooth shape, with a scalloped hem, a dissolve for appearing/vanishing,
+// and the face on the head.
+// Look: chalky cream body, pink chalk rim, black oval eyes, scribbled blush.
+shader_type canvas_item;
+
+const int ROWS = 10;
+const int COLS = 5;
+const int NB = 2 * ROWS + COLS - 2;   // outline points
+uniform vec2 cloth[50];                // grid points (row-major) in ghost-length units, relative to the head centre = quad centre
+uniform float quad_size = 2.4;         // quad side in ghost-length units
+uniform float head_angle = -1.5708;    // direction the head is facing (screen space, radians)
+uniform float phase = 0.0;             // per-ghost time offset
+uniform float look = 0.0;              // -1..1, face glance left/right
+uniform float blink = 0.0;             // 0 open, 1 closed
+uniform float presence = 1.0;          // 0 = gone, 1 = fully here (dissolve)
+uniform float body_width = 1.0;
+uniform float cloth_amount = 1.0;      // strength of the extra cloth ripples
+uniform float cloth_speed = 0.3;       // < 1 = slow motion (underwater feel)
+uniform float scallops = 3.0;          // number of lobes on the hem
+uniform float opacity = 0.92;
+uniform float tail_fade = 0.45;        // hem fades into the dark
+uniform float glow = 0.55;             // soft halo around the body
+uniform float flicker = 0.08;
+uniform float eye_size = 1.0;
+uniform float blush_amount = 0.9;
+uniform float outline = 1.0;           // pink chalk outline strength (0 = none)
+
+uniform vec4 body_color : source_color = vec4(0.96, 0.93, 0.85, 1.0);
+uniform vec4 rim_color : source_color = vec4(0.82, 0.38, 0.55, 1.0);
+uniform vec4 blush_color : source_color = vec4(0.93, 0.55, 0.66, 1.0);
+uniform vec4 eye_color : source_color = vec4(0.04, 0.03, 0.04, 1.0);
+uniform vec4 glow_color : source_color = vec4(0.80, 0.78, 0.95, 1.0);
+
+float hash(vec2 p) {
+	p = fract(p * vec2(123.34, 456.21));
+	p += dot(p, p + 45.32);
+	return fract(p.x * p.y);
+}
+
+float vnoise(vec2 p) {
+	vec2 i = floor(p);
+	vec2 f = fract(p);
+	vec2 u = f * f * (3.0 - 2.0 * f);
+	return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), u.x),
+			   mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), u.x), u.y);
+}
+
+float fbm(vec2 p) {
+	float v = 0.0;
+	float a = 0.5;
+	for (int i = 0; i < 4; i++) {
+		v += a * vnoise(p);
+		p = p * 2.03 + vec2(17.1, 9.2);
+		a *= 0.5;
+	}
+	return v;
+}
+
+float smin(float a, float b, float k) {
+	float h = clamp(0.5 + 0.5 * (b - a) / k, 0.0, 1.0);
+	return mix(b, a, h) - k * h * (1.0 - h);
+}
+
+float ellipse(vec2 p, vec2 c, vec2 r) {
+	return length((p - c) / r) - 1.0;
+}
+
+void fragment() {
+	float t = TIME * cloth_speed + phase;
+	float R = 0.13 * body_width;
+	vec2 p = (UV - 0.5) * quad_size;
+
+	// Slow ripples in the cloth, nothing at the head, strongest at the hem.
+	float far = clamp(length(p) / 0.8, 0.0, 1.0);
+	vec2 q = p + cloth_amount * far * far * 0.13 *
+			(vec2(fbm(p * 1.6 + vec2(-t * 0.45, t * 0.2)), fbm(p * 1.6 + vec2(5.2, -t * 0.4))) - 0.5);
+
+	// Outline of the cloth grid as a polygon (signed distance, negative inside).
+	float d2 = 1e5;
+	float sgn = 1.0;
+	vec2 vj = cloth[(ROWS - 1) * COLS + COLS - 2];   // last outline point (hem, next to the right corner)
+	for (int k = 0; k < NB; k++) {
+		int idx;
+		if (k < ROWS) idx = (ROWS - 1 - k) * COLS + COLS - 1;               // right edge, hem up to head
+		else if (k < 2 * ROWS) idx = (k - ROWS) * COLS;                      // left edge, head down to hem
+		else idx = (ROWS - 1) * COLS + (k - 2 * ROWS + 1);                   // hem, left to right
+		vec2 vi = cloth[idx];
+		vec2 e = vj - vi;
+		vec2 w = q - vi;
+		vec2 b = w - e * clamp(dot(w, e) / max(dot(e, e), 1e-8), 0.0, 1.0);
+		d2 = min(d2, dot(b, b));
+		bvec3 c = bvec3(q.y >= vi.y, q.y < vj.y, e.x * w.y > e.y * w.x);
+		if (all(c) || all(not(c))) sgn = -sgn;
+		vj = vi;
+	}
+	float d_poly = sgn * sqrt(d2) - 0.006;
+
+	// Where along / across the body this pixel is, from the middle column.
+	float d_mid = 1e5;
+	float s_body = 0.0;      // 0 at head centre, 1 at the hem
+	float x_body = 0.0;      // -1..1 across the body
+	int mc = COLS / 2;
+	for (int r = 0; r < ROWS - 1; r++) {
+		vec2 a = cloth[r * COLS + mc];
+		vec2 ab = cloth[(r + 1) * COLS + mc] - a;
+		float h = clamp(dot(q - a, ab) / max(dot(ab, ab), 1e-8), 0.0, 1.0);
+		vec2 c = a + ab * h;
+		float dm = length(q - c);
+		if (dm < d_mid) {
+			d_mid = dm;
+			s_body = (float(r) + h) / float(ROWS - 1);
+			float hw0 = 0.5 * length(cloth[r * COLS + COLS - 1] - cloth[r * COLS]);
+			float hw1 = 0.5 * length(cloth[(r + 1) * COLS + COLS - 1] - cloth[(r + 1) * COLS]);
+			vec2 tn = normalize(ab + vec2(1e-6));
+			x_body = dot(q - c, vec2(-tn.y, tn.x)) / max(mix(hw0, hw1, h), 1e-3);
+		}
+	}
+
+	// Scalloped hem: lobes along the bottom row, notches between them.
+	float d_hem = 1e5;
+	float u_hem = 0.0;
+	for (int c = 0; c < COLS - 1; c++) {
+		vec2 a = cloth[(ROWS - 1) * COLS + c];
+		vec2 ab = cloth[(ROWS - 1) * COLS + c + 1] - a;
+		float h = clamp(dot(q - a, ab) / max(dot(ab, ab), 1e-8), 0.0, 1.0);
+		float dh = length(q - a - ab * h);
+		if (dh < d_hem) { d_hem = dh; u_hem = (float(c) + h) / float(COLS - 1); }
+	}
+	float lobe_x = scallops * 3.14159 * u_hem + 0.45 * sin(t * 0.7 + u_hem * 4.0) * cloth_amount;
+	float lobe = pow(abs(sin(lobe_x)), 0.45);
+	float hem = 0.03 - 0.045 * (1.0 - lobe) + cloth_amount * 0.015 * sin(t * 1.2 + u_hem * 6.0);
+	float hem_w = (1.0 - smoothstep(0.03, 0.09, d_hem)) * smoothstep(0.75, 0.95, s_body);
+	float d_body = d_poly - hem * hem_w;
+	s_body = clamp(s_body, 0.0, 1.0);
+	x_body = clamp(x_body, -1.5, 1.5);
+
+	float d_head = length(q) - R;
+	float d = smin(d_head, d_body, 0.04);
+
+	// Hand-drawn, chalky edge.
+	d += (vnoise(p * 70.0) - 0.5) * 0.005 + (vnoise(p * 14.0 + t * 0.1) - 0.5) * 0.006;
+
+	float aa = max(fwidth(d), 0.0015);
+	float inside = 1.0 - smoothstep(-aa, aa, d);
+
+	// Chalk fill: grain, streaks along the body and dark paper specks.
+	float grain = vnoise(p * vec2(160.0, 60.0));
+	float streak = vnoise(vec2(x_body * 9.0, s_body * 90.0));
+	float chalk = 0.86 + 0.08 * grain + 0.06 * streak;
+	float speck = step(0.985, hash(floor(p * 380.0))) * 0.25;
+	vec3 col = body_color.rgb * (chalk - speck);
+
+	// Soft pink shading inside the edge, then the chalk rim itself.
+	col = mix(col, rim_color.rgb, smoothstep(-0.05, -0.012, d) * 0.18 * outline);
+	float rim_w = 0.010 + 0.004 * vnoise(p * 30.0);
+	float rim = smoothstep(-rim_w - aa, -rim_w + aa, d);
+	col = mix(col, rim_color.rgb * (0.85 + 0.25 * vnoise(p * 200.0)), rim * outline);
+
+	// Face, in the head's own frame (x = right, y = towards the back).
+	vec2 fwd = vec2(cos(head_angle), sin(head_angle));
+	vec2 right = vec2(-fwd.y, fwd.x);
+	vec2 hq = vec2(dot(q, right), -dot(q, fwd));
+	vec2 face = vec2(look * 0.045 * body_width, 0.015);
+	float eye_open = mix(1.0, 0.06, blink);
+	vec2 eye_r = vec2(0.014, 0.021 * eye_open) * body_width * eye_size;
+	float ex = 0.043 * body_width;
+	float eyes = min(ellipse(hq, face + vec2(-ex, 0.0), eye_r),
+					 ellipse(hq, face + vec2(ex, 0.0), eye_r));
+	col = mix(col, eye_color.rgb, 1.0 - smoothstep(-0.15, 0.15, eyes));
+
+	vec2 bl_r = vec2(0.026, 0.017) * body_width;
+	float bx = 0.07 * body_width;
+	float blush = min(ellipse(hq, face + vec2(-bx, 0.042 * body_width), bl_r),
+					  ellipse(hq, face + vec2(bx, 0.042 * body_width), bl_r));
+	float scribble = 0.55 + 0.45 * sin((hq.x + hq.y) * 900.0 + vnoise(hq * 80.0) * 6.0);
+	col = mix(col, blush_color.rgb, (1.0 - smoothstep(-0.3, 0.1, blush)) * scribble * blush_amount);
+
+	// Appear / vanish: a smoky dissolve, head first, hem last, with a glowing edge.
+	float n = fbm(p * 4.0 + phase * 3.1 + vec2(0.0, TIME * 0.15)) * 0.4 + s_body * 0.7;
+	float pres = smoothstep(n - 0.16, n + 0.16, presence * 1.4 - 0.2);
+	float ecto = pres * (1.0 - pres) * 4.0 * step(0.001, presence) * step(presence, 0.999);
+
+	// Spooky: translucent, fading hem, subtle shimmer and flicker.
+	float alpha = opacity;
+	alpha *= 1.0 - tail_fade * smoothstep(0.35, 1.05, s_body);
+	alpha *= 0.86 + 0.14 * fbm(p * 5.0 + vec2(0.0, -t * 0.4));
+	alpha *= 1.0 - flicker * vnoise(vec2(TIME * 4.0 + phase * 13.0, phase));
+	float a_in = inside * alpha * pres;
+	col = mix(col, glow_color.rgb * 1.2, ecto * 0.7);
+
+	// Halo outside the body.
+	float halo = exp(-max(d, 0.0) * 38.0) * glow * 0.35 * (1.0 - inside);
+	halo *= (1.0 - 0.6 * s_body) * (pres + ecto * 0.5);
+
+	float out_a = a_in + halo * (1.0 - a_in);
+	vec3 premul = col * a_in + glow_color.rgb * halo * (1.0 - a_in);
+	COLOR = vec4(premul / max(out_a, 0.0001), out_a * COLOR.a);
+}

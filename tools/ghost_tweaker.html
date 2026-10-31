@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ghost Tweaker · cloth sim</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Patrick+Hand&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* Layout: projector preview fills the left, a scrollable control rail on the right (stacks on narrow screens). Single dark theme: this tool lives next to a pitch-black projection. */
+:root {
+  --night: #0b0a0d;
+  --panel: #141218;
+  --line: #2a2630;
+  --chalk: #efe7d6;
+  --muted: #9a93a3;
+  --pink: #d1618c;
+  --gold: #d9a840;
+  --font-display: "Patrick Hand", "Comic Sans MS", cursive;
+  --font-body: "IBM Plex Sans", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body { background: var(--night); color: var(--chalk); font: 14px/1.45 var(--font-body); display: grid; grid-template-columns: 1fr 380px; overflow: hidden; }
+#stage { position: relative; display: flex; flex-direction: column; min-width: 0; min-height: 0; padding: 16px; gap: 12px; }
+#stage header { display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap; }
+h1 { font: 34px/1 var(--font-display); margin: 0; letter-spacing: .5px; text-wrap: balance; }
+h1 span { color: var(--pink); }
+.sub { color: var(--muted); max-width: 65ch; margin: 0; }
+#viewWrap { position: relative; flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; background: #000; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+#viewWrap:fullscreen { border: 0; border-radius: 0; }
+canvas#view { width: 100%; height: 100%; object-fit: contain; display: block; background: #000; }
+#hud { position: absolute; left: 12px; bottom: 10px; font: 12px var(--font-mono); color: var(--muted); pointer-events: none; font-variant-numeric: tabular-nums; }
+.bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+button, .btn { font: 500 13px var(--font-body); color: var(--chalk); background: #221e27; border: 1px solid var(--line); border-radius: 5px; padding: 7px 12px; cursor: pointer; }
+button:hover { border-color: var(--muted); }
+button:focus-visible, input:focus-visible, textarea:focus-visible, summary:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+button.primary { background: var(--pink); border-color: var(--pink); color: #1a0d13; font-weight: 600; }
+button.on { border-color: var(--gold); color: var(--gold); }
+.bar label { color: var(--muted); font-size: 12px; display: flex; align-items: center; gap: 6px; }
+.bar select { background: #221e27; color: var(--chalk); border: 1px solid var(--line); border-radius: 5px; padding: 5px; }
+
+aside { background: var(--panel); border-left: 1px solid var(--line); overflow-y: auto; padding: 14px 14px 40px; display: flex; flex-direction: column; gap: 10px; }
+aside .how { font-size: 12.5px; color: var(--muted); border: 1px dashed var(--line); border-radius: 6px; padding: 10px 12px; }
+aside .how b { color: var(--chalk); font-weight: 600; }
+aside .how code { font: 12px var(--font-mono); color: var(--gold); }
+details { border: 1px solid var(--line); border-radius: 6px; background: #17151b; }
+summary { cursor: pointer; padding: 9px 12px; font: 20px/1.1 var(--font-display); list-style: none; display: flex; justify-content: space-between; align-items: center; }
+summary::-webkit-details-marker { display: none; }
+summary::after { content: "+"; color: var(--muted); font: 16px var(--font-mono); }
+details[open] summary::after { content: "–"; }
+.ctrls { padding: 2px 12px 12px; display: grid; gap: 9px; }
+.row { display: grid; grid-template-columns: 1fr 64px; gap: 2px 8px; align-items: center; }
+.row label { font-size: 12.5px; color: var(--chalk); }
+.row .val { font: 12px var(--font-mono); color: var(--gold); text-align: right; font-variant-numeric: tabular-nums; }
+.row input[type=range] { grid-column: 1 / -1; width: 100%; accent-color: var(--pink); margin: 0; }
+.row .hint { grid-column: 1 / -1; font-size: 11.5px; color: var(--muted); margin-top: -2px; }
+.row.changed label::before { content: "● "; color: var(--pink); font-size: 9px; vertical-align: 2px; }
+.row.color { grid-template-columns: 1fr 44px; }
+.row.color input { width: 44px; height: 26px; padding: 0; border: 1px solid var(--line); border-radius: 4px; background: none; }
+.row.check { grid-template-columns: 1fr auto; }
+textarea { width: 100%; min-height: 150px; background: #0f0d12; color: var(--chalk); border: 1px solid var(--line); border-radius: 6px; font: 11.5px/1.4 var(--font-mono); padding: 8px; resize: vertical; }
+#toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); background: var(--gold); color: #1d1503; padding: 8px 14px; border-radius: 6px; font-weight: 600; opacity: 0; transition: opacity .2s; pointer-events: none; }
+#toast.show { opacity: 1; }
+@media (max-width: 860px) {
+  /* Preview stays pinned on top; only the settings scroll underneath it. */
+  body { grid-template-columns: 1fr; grid-template-rows: minmax(260px, 50%) 1fr; overflow: hidden; }
+  #stage { padding: 10px 12px; gap: 8px; }
+  #stage .sub { display: none; }
+  h1 { font-size: 26px; }
+  .bar button { padding: 5px 9px; font-size: 12px; }
+  aside { border-left: 0; border-top: 1px solid var(--line); overflow-y: auto; min-height: 0; }
+}
+@media (prefers-reduced-motion: reduce) { #toast { transition: none; } }
+</style>
+</head>
+<body>
+<section id="stage">
+  <header>
+    <h1>Ghost <span>Tweaker</span> · cloth sim</h1>
+    <p class="sub">A live copy of the Godot projector ghosts. Change anything on the right, then copy the settings into <code>ghost_settings.json</code>.</p>
+  </header>
+  <div class="bar">
+    <button id="btnCopy" class="primary">Copy settings JSON</button>
+    <button id="btnRestart">Restart ghosts</button>
+    <button id="btnSpawn">Spawn one now</button>
+    <button id="btnPause">Pause</button>
+    <button id="btnFull">Fullscreen preview</button>
+    <label for="selSpeed">Preview speed
+      <select id="selSpeed"><option value="1" selected>1×</option><option value="2">2×</option><option value="4">4×</option><option value="0.5">½×</option></select>
+    </label>
+    <button id="btnReset">Reset all to defaults</button>
+  </div>
+  <div id="viewWrap"><canvas id="view" width="1600" height="900"></canvas><div id="hud"></div></div>
+</section>
+<aside id="panel">
+  <div class="how"><b>Getting it into Godot:</b> press <b>Copy settings JSON</b>, paste it over the contents of <code>ghost_settings.json</code> in the project folder, then press <b>R</b> in the running app (or restart it). Changed values are marked with a pink dot.</div>
+  <div id="groups"></div>
+  <details id="ioBox">
+    <summary>Settings JSON</summary>
+    <div class="ctrls">
+      <textarea id="json" spellcheck="false" aria-label="Settings JSON"></textarea>
+      <div class="bar"><button id="btnApply">Apply pasted JSON</button><span id="jsonMsg" class="hint"></span></div>
+    </div>
+  </details>
+</aside>
+<div id="toast" role="status"></div>
+
+<script>
+"use strict";
+const DEFAULTS = {"ghost_count": 5, "start_stagger": 4, "life_min": 9, "life_max": 26, "fade_in_min": 5.5, "fade_in_max": 16, "fade_out_min": 3, "fade_out_max": 8, "respawn_min": 3, "respawn_max": 12, "size_min": 0.33, "size_max": 0.19, "speed_min": 99, "speed_max": 131, "speed_low": 2, "speed_high": 1.95, "surge_rate": 30, "turn_amount": 3.9, "turn_rate": 19, "head_lead": 0, "glance": 0.7, "head_turn_speed": 2, "bob": 8, "personal_space": 0.4, "body_length": 0.97, "neck_stiffness": 0.35, "neck_length": 0.4, "cloth_stiffness": 0.15, "cloth_bend": 0.48, "stretch": 0.35, "squash": 0.48, "water_drag": 3.6, "shape_memory": 0, "gravity": -1.35, "flutter": 0.55, "wave_amount": 0.55, "wave_speed": 0.6, "cloth_iterations": 9, "body_width_min": 0.8, "body_width_max": 1.15, "flare_min": 0.5, "flare_max": 0.9, "scallops_min": 2, "scallops_max": 4, "cloth_amount": 0.75, "cloth_speed_min": 0.22, "cloth_speed_max": 0.53, "opacity_far": 0.77, "opacity_near": 0.95, "tail_fade": 0.45, "glow": 1.45, "ghost_flicker": 0.38, "blink_min": 3, "blink_max": 9, "blink_duration": 0.3, "double_blink": 0.3, "look_amount": 0.8, "eye_size": 1.55, "blush": 1, "outline": 0.0, "body_color": "#f5edd9", "rim_color": "#d1618c", "blush_color": "#ed8ca8", "eye_color": "#0a080a", "glow_color": "#ccc7f2", "sparkle_color": "#d9a840", "sparkle_count": 0, "sparkle_size": 1, "sparkle_speed": 3.65, "filter_on": true, "bloom": 1.75, "bloom_radius": 33, "grain": 0.18, "aberration": 6.2, "screen_flicker": 0.21, "vignette": 0, "black_floor": 0};
+const GHOST_FRAG_BODY = "// One ghost, drawn procedurally.\n// The body is a real piece of simulated cloth: scripts/ghost.gd runs a\n// mass-spring grid (ROWS x COLS particles) hanging off the head, and this\n// shader draws the outline of that grid (left edge, hem, right edge) as a\n// smooth shape, with a scalloped hem, a dissolve for appearing/vanishing,\n// and the face on the head.\n// Look: chalky cream body, pink chalk rim, black oval eyes, scribbled blush.\n\n\nconst int ROWS = 10;\nconst int COLS = 5;\nconst int NB = 2 * ROWS + COLS - 2;   // outline points\nuniform vec2 cloth[50];                // grid points (row-major) in ghost-length units, relative to the head centre = quad centre\nuniform float quad_size;         // quad side in ghost-length units\nuniform float head_angle;    // direction the head is facing (screen space, radians)\nuniform float phase;             // per-ghost time offset\nuniform float look;              // -1..1, face glance left/right\nuniform float blink;             // 0 open, 1 closed\nuniform float presence;          // 0 = gone, 1 = fully here (dissolve)\nuniform float body_width;\nuniform float cloth_amount;      // strength of the extra cloth ripples\nuniform float cloth_speed;       // < 1 = slow motion (underwater feel)\nuniform float scallops;          // number of lobes on the hem\nuniform float opacity;\nuniform float tail_fade;        // hem fades into the dark\nuniform float glow;             // soft halo around the body\nuniform float flicker;\nuniform float eye_size;\nuniform float blush_amount;\nuniform float outline;           // pink chalk outline strength (0 = none)\n\nuniform vec4 body_color;\nuniform vec4 rim_color;\nuniform vec4 blush_color;\nuniform vec4 eye_color;\nuniform vec4 glow_color;\n\nfloat hash(vec2 p) {\n\tp = fract(p * vec2(123.34, 456.21));\n\tp += dot(p, p + 45.32);\n\treturn fract(p.x * p.y);\n}\n\nfloat vnoise(vec2 p) {\n\tvec2 i = floor(p);\n\tvec2 f = fract(p);\n\tvec2 u = f * f * (3.0 - 2.0 * f);\n\treturn mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), u.x),\n\t\t\t   mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), u.x), u.y);\n}\n\nfloat fbm(vec2 p) {\n\tfloat v = 0.0;\n\tfloat a = 0.5;\n\tfor (int i = 0; i < 4; i++) {\n\t\tv += a * vnoise(p);\n\t\tp = p * 2.03 + vec2(17.1, 9.2);\n\t\ta *= 0.5;\n\t}\n\treturn v;\n}\n\nfloat smin(float a, float b, float k) {\n\tfloat h = clamp(0.5 + 0.5 * (b - a) / k, 0.0, 1.0);\n\treturn mix(b, a, h) - k * h * (1.0 - h);\n}\n\nfloat ellipse(vec2 p, vec2 c, vec2 r) {\n\treturn length((p - c) / r) - 1.0;\n}\n\nvoid main() {\n\tfloat t = u_time * cloth_speed + phase;\n\tfloat R = 0.13 * body_width;\n\tvec2 p = (v_uv - 0.5) * quad_size;\n\n\t// Slow ripples in the cloth, nothing at the head, strongest at the hem.\n\tfloat far = clamp(length(p) / 0.8, 0.0, 1.0);\n\tvec2 q = p + cloth_amount * far * far * 0.13 *\n\t\t\t(vec2(fbm(p * 1.6 + vec2(-t * 0.45, t * 0.2)), fbm(p * 1.6 + vec2(5.2, -t * 0.4))) - 0.5);\n\n\t// Outline of the cloth grid as a polygon (signed distance, negative inside).\n\tfloat d2 = 1e5;\n\tfloat sgn = 1.0;\n\tvec2 vj = cloth[(ROWS - 1) * COLS + COLS - 2];   // last outline point (hem, next to the right corner)\n\tfor (int k = 0; k < NB; k++) {\n\t\tint idx;\n\t\tif (k < ROWS) idx = (ROWS - 1 - k) * COLS + COLS - 1;               // right edge, hem up to head\n\t\telse if (k < 2 * ROWS) idx = (k - ROWS) * COLS;                      // left edge, head down to hem\n\t\telse idx = (ROWS - 1) * COLS + (k - 2 * ROWS + 1);                   // hem, left to right\n\t\tvec2 vi = cloth[idx];\n\t\tvec2 e = vj - vi;\n\t\tvec2 w = q - vi;\n\t\tvec2 b = w - e * clamp(dot(w, e) / max(dot(e, e), 1e-8), 0.0, 1.0);\n\t\td2 = min(d2, dot(b, b));\n\t\tbvec3 c = bvec3(q.y >= vi.y, q.y < vj.y, e.x * w.y > e.y * w.x);\n\t\tif (all(c) || all(not(c))) sgn = -sgn;\n\t\tvj = vi;\n\t}\n\tfloat d_poly = sgn * sqrt(d2) - 0.006;\n\n\t// Where along / across the body this pixel is, from the middle column.\n\tfloat d_mid = 1e5;\n\tfloat s_body = 0.0;      // 0 at head centre, 1 at the hem\n\tfloat x_body = 0.0;      // -1..1 across the body\n\tint mc = COLS / 2;\n\tfor (int r = 0; r < ROWS - 1; r++) {\n\t\tvec2 a = cloth[r * COLS + mc];\n\t\tvec2 ab = cloth[(r + 1) * COLS + mc] - a;\n\t\tfloat h = clamp(dot(q - a, ab) / max(dot(ab, ab), 1e-8), 0.0, 1.0);\n\t\tvec2 c = a + ab * h;\n\t\tfloat dm = length(q - c);\n\t\tif (dm < d_mid) {\n\t\t\td_mid = dm;\n\t\t\ts_body = (float(r) + h) / float(ROWS - 1);\n\t\t\tfloat hw0 = 0.5 * length(cloth[r * COLS + COLS - 1] - cloth[r * COLS]);\n\t\t\tfloat hw1 = 0.5 * length(cloth[(r + 1) * COLS + COLS - 1] - cloth[(r + 1) * COLS]);\n\t\t\tvec2 tn = normalize(ab + vec2(1e-6));\n\t\t\tx_body = dot(q - c, vec2(-tn.y, tn.x)) / max(mix(hw0, hw1, h), 1e-3);\n\t\t}\n\t}\n\n\t// Scalloped hem: lobes along the bottom row, notches between them.\n\tfloat d_hem = 1e5;\n\tfloat u_hem = 0.0;\n\tfor (int c = 0; c < COLS - 1; c++) {\n\t\tvec2 a = cloth[(ROWS - 1) * COLS + c];\n\t\tvec2 ab = cloth[(ROWS - 1) * COLS + c + 1] - a;\n\t\tfloat h = clamp(dot(q - a, ab) / max(dot(ab, ab), 1e-8), 0.0, 1.0);\n\t\tfloat dh = length(q - a - ab * h);\n\t\tif (dh < d_hem) { d_hem = dh; u_hem = (float(c) + h) / float(COLS - 1); }\n\t}\n\tfloat lobe_x = scallops * 3.14159 * u_hem + 0.45 * sin(t * 0.7 + u_hem * 4.0) * cloth_amount;\n\tfloat lobe = pow(abs(sin(lobe_x)), 0.45);\n\tfloat hem = 0.03 - 0.045 * (1.0 - lobe) + cloth_amount * 0.015 * sin(t * 1.2 + u_hem * 6.0);\n\tfloat hem_w = (1.0 - smoothstep(0.03, 0.09, d_hem)) * smoothstep(0.75, 0.95, s_body);\n\tfloat d_body = d_poly - hem * hem_w;\n\ts_body = clamp(s_body, 0.0, 1.0);\n\tx_body = clamp(x_body, -1.5, 1.5);\n\n\tfloat d_head = length(q) - R;\n\tfloat d = smin(d_head, d_body, 0.04);\n\n\t// Hand-drawn, chalky edge.\n\td += (vnoise(p * 70.0) - 0.5) * 0.005 + (vnoise(p * 14.0 + t * 0.1) - 0.5) * 0.006;\n\n\tfloat aa = max(fwidth(d), 0.0015);\n\tfloat inside = 1.0 - smoothstep(-aa, aa, d);\n\n\t// Chalk fill: grain, streaks along the body and dark paper specks.\n\tfloat grain = vnoise(p * vec2(160.0, 60.0));\n\tfloat streak = vnoise(vec2(x_body * 9.0, s_body * 90.0));\n\tfloat chalk = 0.86 + 0.08 * grain + 0.06 * streak;\n\tfloat speck = step(0.985, hash(floor(p * 380.0))) * 0.25;\n\tvec3 col = body_color.rgb * (chalk - speck);\n\n\t// Soft pink shading inside the edge, then the chalk rim itself.\n\tcol = mix(col, rim_color.rgb, smoothstep(-0.05, -0.012, d) * 0.18 * outline);\n\tfloat rim_w = 0.010 + 0.004 * vnoise(p * 30.0);\n\tfloat rim = smoothstep(-rim_w - aa, -rim_w + aa, d);\n\tcol = mix(col, rim_color.rgb * (0.85 + 0.25 * vnoise(p * 200.0)), rim * outline);\n\n\t// Face, in the head's own frame (x = right, y = towards the back).\n\tvec2 fwd = vec2(cos(head_angle), sin(head_angle));\n\tvec2 right = vec2(-fwd.y, fwd.x);\n\tvec2 hq = vec2(dot(q, right), -dot(q, fwd));\n\tvec2 face = vec2(look * 0.045 * body_width, 0.015);\n\tfloat eye_open = mix(1.0, 0.06, blink);\n\tvec2 eye_r = vec2(0.014, 0.021 * eye_open) * body_width * eye_size;\n\tfloat ex = 0.043 * body_width;\n\tfloat eyes = min(ellipse(hq, face + vec2(-ex, 0.0), eye_r),\n\t\t\t\t\t ellipse(hq, face + vec2(ex, 0.0), eye_r));\n\tcol = mix(col, eye_color.rgb, 1.0 - smoothstep(-0.15, 0.15, eyes));\n\n\tvec2 bl_r = vec2(0.026, 0.017) * body_width;\n\tfloat bx = 0.07 * body_width;\n\tfloat blush = min(ellipse(hq, face + vec2(-bx, 0.042 * body_width), bl_r),\n\t\t\t\t\t  ellipse(hq, face + vec2(bx, 0.042 * body_width), bl_r));\n\tfloat scribble = 0.55 + 0.45 * sin((hq.x + hq.y) * 900.0 + vnoise(hq * 80.0) * 6.0);\n\tcol = mix(col, blush_color.rgb, (1.0 - smoothstep(-0.3, 0.1, blush)) * scribble * blush_amount);\n\n\t// Appear / vanish: a smoky dissolve, head first, hem last, with a glowing edge.\n\tfloat n = fbm(p * 4.0 + phase * 3.1 + vec2(0.0, u_time * 0.15)) * 0.4 + s_body * 0.7;\n\tfloat pres = smoothstep(n - 0.16, n + 0.16, presence * 1.4 - 0.2);\n\tfloat ecto = pres * (1.0 - pres) * 4.0 * step(0.001, presence) * step(presence, 0.999);\n\n\t// Spooky: translucent, fading hem, subtle shimmer and flicker.\n\tfloat alpha = opacity;\n\talpha *= 1.0 - tail_fade * smoothstep(0.35, 1.05, s_body);\n\talpha *= 0.86 + 0.14 * fbm(p * 5.0 + vec2(0.0, -t * 0.4));\n\talpha *= 1.0 - flicker * vnoise(vec2(u_time * 4.0 + phase * 13.0, phase));\n\tfloat a_in = inside * alpha * pres;\n\tcol = mix(col, glow_color.rgb * 1.2, ecto * 0.7);\n\n\t// Halo outside the body.\n\tfloat halo = exp(-max(d, 0.0) * 38.0) * glow * 0.35 * (1.0 - inside);\n\thalo *= (1.0 - 0.6 * s_body) * (pres + ecto * 0.5);\n\n\tfloat out_a = a_in + halo * (1.0 - a_in);\n\tvec3 premul = col * a_in + glow_color.rgb * halo * (1.0 - a_in);\n\tfragColor = vec4(premul / max(out_a, 0.0001), out_a * 1.0);\n}\n";
+const SCREEN_FRAG_BODY = "// Full-screen \"spooky\" filter applied on top of everything.\n// Keeps pure black at pure black (important for a projector), and only\n// touches the light coming from the ghosts: bloom, film grain, a hint of\n// chromatic fringing, slow flicker and a vignette.\n\n\nuniform sampler2D screen_tex;\nuniform float bloom;\nuniform float bloom_radius;     // in pixels\nuniform float grain;\nuniform float aberration;        // in pixels at the screen edge\nuniform float flicker;\nuniform float vignette;\nuniform float black_floor;     // anything darker becomes true black\n\nfloat hash(vec2 p) {\n\tp = fract(p * vec2(123.34, 456.21));\n\tp += dot(p, p + 45.32);\n\treturn fract(p.x * p.y);\n}\n\nvoid main() {\n\tvec2 uv = v_uv;\n\tvec2 px = u_px;\n\tvec2 dir = uv - 0.5;\n\n\tvec3 c;\n\tvec2 off = dir * 2.0 * aberration * px;\n\tc.r = texture(screen_tex, uv + off).r;\n\tc.g = texture(screen_tex, uv).g;\n\tc.b = texture(screen_tex, uv - off).b;\n\n\t// Cheap bloom: two rings of taps.\n\tvec3 b = vec3(0.0);\n\tfor (int i = 0; i < 12; i++) {\n\t\tfloat ang = float(i) * 0.5236;\n\t\tvec2 o = vec2(cos(ang), sin(ang)) * px * bloom_radius;\n\t\tb += texture(screen_tex, uv + o).rgb;\n\t\tb += texture(screen_tex, uv + o * 2.3).rgb * 0.6;\n\t}\n\tb /= 19.2;\n\tc += b * b * bloom;\n\n\t// Film grain on the lit parts only (multiplicative, so black stays black).\n\tfloat n = hash(floor(uv / px) + fract(u_time * 7.13) * 91.7);\n\tc *= 1.0 + (n - 0.5) * 2.0 * grain;\n\n\t// Slow, uneven flicker like an old projector bulb.\n\tfloat f = sin(u_time * 2.1) * 0.5 + sin(u_time * 5.3 + 1.7) * 0.3 + sin(u_time * 13.7) * 0.2;\n\tc *= 1.0 - flicker * (0.5 + 0.5 * f);\n\n\tc *= mix(1.0, smoothstep(0.95, 0.25, length(dir * vec2(1.0, 0.8))), vignette);\n\n\tc = max(c - black_floor, 0.0) / (1.0 - black_floor);\n\tfragColor = vec4(c, 1.0);\n}\n";
+
+// ---------- Controls: every key in ghost_settings.json ----------
+const GROUPS = [
+  ["Population & fading", true, [
+    ["ghost_count", "Number of ghosts", 0, 20, 1],
+    ["start_stagger", "Start stagger (s per ghost)", 0, 15, 0.5, "At launch, ghosts appear one by one this far apart."],
+    ["life_min", "Lifetime min (s)", 3, 120, 1], ["life_max", "Lifetime max (s)", 3, 180, 1],
+    ["fade_in_min", "Fade in min (s)", 0.5, 20, 0.5], ["fade_in_max", "Fade in max (s)", 0.5, 20, 0.5],
+    ["fade_out_min", "Fade out min (s)", 0.5, 20, 0.5], ["fade_out_max", "Fade out max (s)", 0.5, 20, 0.5],
+    ["respawn_min", "Respawn delay min (s)", 0, 60, 0.5], ["respawn_max", "Respawn delay max (s)", 0, 60, 0.5],
+  ]],
+  ["Size & head movement", true, [
+    ["size_min", "Size, far ghosts", 0.05, 0.9, 0.01, "Ghost length as a fraction of screen height."],
+    ["size_max", "Size, near ghosts", 0.05, 0.9, 0.01],
+    ["speed_min", "Speed, far ghosts (px/s)", 0, 200, 1], ["speed_max", "Speed, near ghosts (px/s)", 0, 200, 1],
+    ["speed_low", "Surge: slowest", 0, 2, 0.05, "Speed multiplier during a near-pause."],
+    ["speed_high", "Surge: fastest", 0, 3, 0.05],
+    ["surge_rate", "Surge change rate", 0, 30, 0.5],
+    ["turn_amount", "Path wandering", 0, 4, 0.05],
+    ["turn_rate", "Wandering change rate", 0, 40, 0.5],
+    ["head_lead", "Head leads into turns", 0, 2, 0.05],
+    ["glance", "Head looks around", 0, 2, 0.05],
+    ["head_turn_speed", "Head turn speed", 0.1, 8, 0.1],
+    ["bob", "Floating wobble (px)", 0, 40, 1],
+    ["personal_space", "Personal space", 0, 1.5, 0.05],
+  ]],
+  ["Cloth simulation", true, [
+    ["body_length", "Body length", 0.3, 1.2, 0.01, "Head to hem, in ghost lengths."],
+    ["neck_stiffness", "Neck stiffness", 0, 1, 0.01, "Holds the cloth just below the head in shape, so the head blends gradually into the body."],
+    ["neck_length", "Neck stiffness reach", 0, 1, 0.01, "How far down the body the stiffness fades out (fraction of the body)."],
+    ["water_drag", "Water drag", 0, 6, 0.05, "Speed lost per second. Higher = thicker water, slower billowing."],
+    ["shape_memory", "Shape memory", 0, 8, 0.05, "Pull back to hanging straight behind the head. 0 = completely limp."],
+    ["cloth_stiffness", "Stretch & shear springs", 0, 1, 0.01],
+    ["cloth_bend", "Bend springs", 0, 1, 0.01, "0 = crumples like silk, 1 = stiff like card."],
+    ["stretch", "Stretch when pulled", 0, 1, 0.01],
+    ["squash", "Bunch up (folds)", 0, 0.9, 0.01, "How much the fabric may gather when pushed together."],
+    ["gravity", "Gravity (down)", -2, 2, 0.05, "Ghost lengths per s². Negative floats up."],
+    ["flutter", "Currents", 0, 3, 0.05, "Slow water currents pushing the cloth."],
+    ["wave_amount", "Wave size", 0, 3, 0.05],
+    ["wave_speed", "Wave speed", 0, 4, 0.05],
+    ["cloth_iterations", "Solver passes", 1, 16, 1, "More = stiffer, more exact springs."],
+    ["cloth_amount", "Shader ripples", 0, 3, 0.05],
+    ["cloth_speed_min", "Ripple speed min", 0, 2, 0.01], ["cloth_speed_max", "Ripple speed max", 0, 2, 0.01],
+  ]],
+  ["Shape", false, [
+    ["body_width_min", "Body width min", 0.4, 2, 0.01], ["body_width_max", "Body width max", 0.4, 2, 0.01],
+    ["flare_min", "Hem flare min", 0, 1.5, 0.01], ["flare_max", "Hem flare max", 0, 1.5, 0.01],
+    ["scallops_min", "Hem lobes min", 1, 7, 1], ["scallops_max", "Hem lobes max", 1, 7, 1],
+  ]],
+  ["Face & blinking", true, [
+    ["blink_min", "Time between blinks min (s)", 0.5, 30, 0.5], ["blink_max", "Time between blinks max (s)", 0.5, 30, 0.5],
+    ["blink_duration", "Blink duration (s)", 0.05, 1.5, 0.01],
+    ["double_blink", "Double blink chance", 0, 1, 0.05],
+    ["look_amount", "Eyes glance sideways", 0, 1.5, 0.05],
+    ["eye_size", "Eye size", 0.3, 2.5, 0.05],
+    ["blush", "Blush", 0, 1, 0.05],
+  ]],
+  ["Glow & transparency", false, [
+    ["opacity_far", "Opacity, far ghosts", 0, 1, 0.01], ["opacity_near", "Opacity, near ghosts", 0, 1, 0.01],
+    ["tail_fade", "Hem fades out", 0, 1, 0.01],
+    ["outline", "Pink outline", 0, 1, 0.01, "0 = no outline."],
+    ["glow", "Halo", 0, 2, 0.01],
+    ["ghost_flicker", "Ghost flicker", 0, 0.6, 0.01],
+  ]],
+  ["Colours", false, [
+    ["body_color", "Body", "color"], ["rim_color", "Outline", "color"], ["blush_color", "Blush", "color"],
+    ["eye_color", "Eyes", "color"], ["glow_color", "Halo & dissolve", "color"], ["sparkle_color", "Sparkles", "color"],
+  ]],
+  ["Sparkles", false, [
+    ["sparkle_count", "Count", 0, 150, 1], ["sparkle_size", "Size", 0.2, 3, 0.05], ["sparkle_speed", "Twinkle speed", 0, 4, 0.05],
+  ]],
+  ["Screen filter", false, [
+    ["filter_on", "Filter on", "check"],
+    ["bloom", "Bloom", 0, 3, 0.05], ["bloom_radius", "Bloom radius (px)", 1, 40, 1],
+    ["grain", "Film grain", 0, 0.5, 0.01], ["aberration", "Colour fringe (px)", 0, 10, 0.1],
+    ["screen_flicker", "Projector flicker", 0, 0.4, 0.01], ["vignette", "Vignette", 0, 1, 0.01],
+    ["black_floor", "Black floor", 0, 0.1, 0.002, "Anything darker than this is pushed to true black."],
+  ]],
+];
+
+let S = Object.assign({}, DEFAULTS);
+try { const saved = JSON.parse(localStorage.getItem("ghost-tweaker-cloth") || "null"); if (saved) for (const k in saved) if (k in DEFAULTS) S[k] = saved[k]; } catch (e) {}
+const f = k => +S[k];
+const randRange = k => { const a = f(k + "_min"), b = Math.max(a, f(k + "_max")); return a + Math.random() * (b - a); };
+const lerp = (a, b, t) => a + (b - a) * t;
+const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
+const hex = h => { const n = parseInt(String(h).slice(1), 16); return [(n >> 16 & 255) / 255, (n >> 8 & 255) / 255, (n & 255) / 255]; };
+const angDiff = (from, to) => { let d = (to - from) % (Math.PI * 2); if (d > Math.PI) d -= Math.PI * 2; if (d < -Math.PI) d += Math.PI * 2; return d; };
+const lerpAngle = (a, b, t) => a + angDiff(a, b) * t;
+
+// ---------- Noise (stands in for Godot's FastNoiseLite, frequency 0.02) ----------
+function makeNoise() {
+  const p = new Uint8Array(512), perm = [...Array(256).keys()];
+  for (let i = 255; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [perm[i], perm[j]] = [perm[j], perm[i]]; }
+  for (let i = 0; i < 512; i++) p[i] = perm[i & 255];
+  const grad = (h, x, y) => { const a = h * 0.0245436926; return Math.cos(a) * x + Math.sin(a) * y; };
+  const fade = t => t * t * t * (t * (t * 6 - 15) + 10);
+  return (x, y) => {
+    x *= 0.02; y *= 0.02;
+    const X = Math.floor(x), Y = Math.floor(y), xf = x - X, yf = y - Y, xi = X & 255, yi = Y & 255;
+    const u = fade(xf), v = fade(yf);
+    const aa = p[p[xi] + yi], ab = p[p[xi] + yi + 1], ba = p[p[xi + 1] + yi], bb = p[p[xi + 1] + yi + 1];
+    const n = lerp(lerp(grad(aa, xf, yf), grad(ba, xf - 1, yf), u), lerp(grad(ab, xf, yf - 1), grad(bb, xf - 1, yf - 1), u), v);
+    return clamp(n * 1.5, -1, 1);
+  };
+}
+
+// ---------- WebGL ----------
+const canvas = document.getElementById("view");
+const gl = canvas.getContext("webgl2", { premultipliedAlpha: false, antialias: false, alpha: false });
+if (!gl) document.getElementById("hud").textContent = "This preview needs WebGL2, which this browser did not provide.";
+
+const VERT = `#version 300 es
+in vec2 a_corner; uniform vec2 u_center; uniform vec2 u_size; uniform vec2 u_res; out vec2 v_uv;
+void main(){ vec2 px = u_center + a_corner * u_size; v_uv = a_corner + 0.5;
+  gl_Position = vec4(px.x / u_res.x * 2.0 - 1.0, 1.0 - px.y / u_res.y * 2.0, 0.0, 1.0); }`;
+const FS_HEAD = `#version 300 es
+precision highp float; in vec2 v_uv; out vec4 fragColor; uniform float u_time; uniform vec2 u_px;
+`;
+const COPY_FRAG = FS_HEAD + `uniform sampler2D tex; void main(){ fragColor = texture(tex, v_uv); }`;
+const SPARK_FRAG = FS_HEAD + `uniform sampler2D tex; void main(){ fragColor = texture(tex, v_uv); }`;
+
+function program(fs) {
+  const mk = (type, src) => { const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s);
+    if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) { console.error(gl.getShaderInfoLog(s), src); throw new Error(gl.getShaderInfoLog(s)); } return s; };
+  const p = gl.createProgram(); gl.attachShader(p, mk(gl.VERTEX_SHADER, VERT)); gl.attachShader(p, mk(gl.FRAGMENT_SHADER, fs));
+  gl.bindAttribLocation(p, 0, "a_corner"); gl.linkProgram(p);
+  const loc = {}; return { p, u: n => (n in loc ? loc[n] : (loc[n] = gl.getUniformLocation(p, n))) };
+}
+let ghostProg, screenProg, copyProg, sparkProg;
+if (gl) {
+  ghostProg = program(FS_HEAD + GHOST_FRAG_BODY);
+  screenProg = program(FS_HEAD + SCREEN_FRAG_BODY);
+  copyProg = program(COPY_FRAG);
+  sparkProg = program(SPARK_FRAG);
+  const vb = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, vb);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-.5, -.5, .5, -.5, -.5, .5, .5, .5]), gl.STATIC_DRAW);
+  gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+}
+let W = 1600, H = 900, sceneTex, sceneFbo, sparkTex;
+const sparkCanvas = document.createElement("canvas"); const sctx = sparkCanvas.getContext("2d");
+function resize() {
+  W = canvas.width; H = canvas.height; sparkCanvas.width = W; sparkCanvas.height = H;
+  if (!gl) return;
+  sceneTex = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, sceneTex);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, W, H, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  sceneFbo = gl.createFramebuffer(); gl.bindFramebuffer(gl.FRAMEBUFFER, sceneFbo);
+  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, sceneTex, 0);
+  sparkTex = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, sparkTex);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+}
+resize();
+
+// ---------- Sparkles (scripts/sparkles.gd) ----------
+let sparkles = [], sparkT = 0;
+function setupSparkles() {
+  const unit = H / 1080 * f("sparkle_size"); sparkles = [];
+  for (let i = 0; i < Math.round(f("sparkle_count")); i++) sparkles.push({
+    x: Math.random() * W, y: Math.random() * H, size: lerp(8, 22, Math.random()) * unit, rot: lerp(-.5, .5, Math.random()),
+    phase: Math.random() * Math.PI * 2, speed: lerp(.3, 1.1, Math.random()), kind: Math.floor(Math.random() * 3),
+    dx: lerp(-4, 4, Math.random()) * H / 1080, dy: lerp(-6, 2, Math.random()) * H / 1080 });
+}
+function drawSparkles(dt) {
+  sparkT += dt * f("sparkle_speed");
+  sctx.clearRect(0, 0, W, H); sctx.lineCap = "round";
+  const [r, g, b] = hex(S.sparkle_color).map(v => Math.round(v * 255));
+  for (const s of sparkles) {
+    s.x = (s.x + s.dx * dt + W) % W; s.y = (s.y + s.dy * dt + H) % H;
+    const tw = .5 + .5 * Math.sin(sparkT * s.speed + s.phase), a = tw ** 3; if (a < .02) continue;
+    const sz = s.size * (.7 + .3 * tw), w = Math.max(sz * .14, 1.5);
+    sctx.save(); sctx.translate(s.x, s.y); sctx.rotate(s.rot); sctx.strokeStyle = `rgba(${r},${g},${b},${a})`; sctx.lineWidth = w;
+    sctx.beginPath();
+    if (s.kind === 0) { sctx.moveTo(-sz, 0); sctx.lineTo(sz, 0); sctx.moveTo(0, -sz * 1.2); sctx.lineTo(0, sz * 1.2); }
+    else if (s.kind === 1) { const q = sz * .7; sctx.moveTo(-q, -q); sctx.lineTo(q, q); sctx.moveTo(-q, q); sctx.lineTo(q, -q); }
+    else { sctx.lineWidth = w * .8; sctx.moveTo(-sz * .3, -sz); sctx.lineTo(sz * .1, sz); sctx.moveTo(sz * .3, -sz * .8); sctx.lineTo(sz * .6, sz * .6); }
+    sctx.stroke(); sctx.restore();
+  }
+}
+
+// ---------- Ghosts (scripts/ghost.gd) ----------
+const ROWS = 10, COLS = 5, PINNED = 2, NP = ROWS * COLS;
+let ghosts = [], pending = [], simTime = 0;
+class Ghost {
+  constructor() {
+    this.noise = makeNoise(); this.t = 0; this.phase = Math.random() * 100; this.bobPhase = Math.random() * Math.PI * 2;
+    this.depth = Math.random(); this.rand = { body_width: Math.random(), flare: Math.random(), scallops: Math.random(), cloth_speed: Math.random() };
+    this.x = lerp(.15, .85, Math.random()) * W; this.y = lerp(.15, .85, Math.random()) * H;
+    this.heading = Math.random() * Math.PI * 2; this.headAngle = this.heading; this.turnRate = 0; this.avoid = [0, 0];
+    this.appear = randRange("fade_in"); this.vanishT = randRange("fade_out"); this.life = randRange("life");
+    this.blinkIn = lerp(1, f("blink_max"), Math.random()); this.blinkT = -1; this.presence = 0; this.dying = false;
+    this.applySize();
+    this.pts = []; this.prev = [];
+    for (let i = 0; i < NP; i++) { const p = this.restWorld(i); this.pts.push(p); this.prev.push([...p]); }
+  }
+  // Rest shape and springs, rebuilt when size/shape settings change (like apply_settings in ghost.gd).
+  applySize() {
+    this.len = H * lerp(f("size_min"), f("size_max"), this.depth);
+    const key = [this.len, f("body_length"), this.pick("body_width"), this.pick("flare")].join();
+    if (key === this.sizeKey) return; this.sizeKey = key;
+    const gap = this.len * f("body_length") / (ROWS - 1), headR = .13 * this.pick("body_width") * this.len, flare = this.pick("flare");
+    this.rest = [];
+    for (let r = 0; r < ROWS; r++) { const half = headR * (1 + flare * r / (ROWS - 1)); for (let c = 0; c < COLS; c++) this.rest.push([(c / (COLS - 1) * 2 - 1) * half, r * gap]); }
+    this.links = [];
+    const add = (a, b, bend) => this.links.push([a, b, Math.hypot(this.rest[a][0] - this.rest[b][0], this.rest[a][1] - this.rest[b][1]), bend]);
+    for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
+      const i = r * COLS + c;
+      if (c + 1 < COLS) add(i, i + 1, 0);
+      if (r + 1 < ROWS) add(i, i + COLS, 0);
+      if (r + 1 < ROWS && c + 1 < COLS) { add(i, i + COLS + 1, 0); add(i + 1, i + COLS, 0); }
+      if (c + 2 < COLS) add(i, i + 2, 1);
+      if (r + 2 < ROWS) add(i, i + 2 * COLS, 1);
+    }
+  }
+  restWorld(i) { const fx = Math.cos(this.headAngle), fy = Math.sin(this.headAngle), [rx, ry] = this.rest[i];
+    return [this.x - fy * rx - fx * ry, this.y + fx * rx - fy * ry]; }
+  pick(k) { return lerp(f(k + "_min"), f(k + "_max"), this.rand[k]); }
+  update(dt) {
+    this.t += dt; this.applySize();
+    const nz = this.noise, t = this.t;
+    // head movement
+    let target = nz(t * f("turn_rate"), 0) * f("turn_amount");
+    const m = this.len * .3;
+    if (this.x < m || this.x > W - m || this.y < m || this.y > H - m) target += clamp(angDiff(this.heading, Math.atan2(H / 2 - this.y, W / 2 - this.x)), -1, 1) * 1.2;
+    const al = Math.hypot(...this.avoid); if (al > 0) target += clamp(angDiff(this.heading, Math.atan2(this.avoid[1], this.avoid[0])), -1, 1) * Math.min(al, 1);
+    this.turnRate = lerp(this.turnRate, target, dt * 1.2); this.heading += this.turnRate * dt;
+    const surge = clamp(nz(0, t * f("surge_rate")) * 1.6 + .5, 0, 1);
+    const spd = lerp(f("speed_min"), f("speed_max"), this.depth) * H / 1080 * lerp(f("speed_low"), f("speed_high"), surge * surge);
+    const dx = Math.cos(this.heading), dy = Math.sin(this.heading), bob = Math.sin(t * 1.3 + this.bobPhase) * f("bob");
+    this.x += dx * spd * dt - dy * bob * dt; this.y += dy * spd * dt + dx * bob * dt;
+    const lead = clamp(this.turnRate * f("head_lead"), -.8, .8), glance = nz(500, t * 4) * f("glance");
+    this.headAngle = lerpAngle(this.headAngle, this.heading + lead + glance, Math.min(1, dt * f("head_turn_speed")));
+    // cloth
+    this.simAcc = (this.simAcc || 0) + dt; this.simT = this.simT || 0;
+    while (this.simAcc >= 1 / 60) { this.simAcc -= 1 / 60; this.simT += 1 / 60; this.clothStep(1 / 60); }
+    // blinking
+    const dur = Math.max(f("blink_duration"), .05);
+    if (this.blinkT < 0) { this.blinkIn -= dt; if (this.blinkIn <= 0) this.blinkT = 0; }
+    else { this.blinkT += dt; if (this.blinkT >= dur) { this.blinkT = -1; this.blinkIn = Math.random() < f("double_blink") ? dur * .6 : randRange("blink"); } }
+    // lifecycle
+    this.life -= dt; if (this.life <= 0) this.dying = true;
+    if (this.dying) { this.presence = Math.max(this.presence - dt / this.vanishT, 0); if (this.presence <= 0) { this.gone = true; scheduleSpawn(randRange("respawn")); } }
+    else this.presence = Math.min(this.presence + dt / this.appear, 1);
+  }
+  // Mass-spring cloth grid pinned to the head (same as _cloth_step in ghost.gd).
+  clothStep(h) {
+    const P = this.pts, Q = this.prev, nz = this.noise, t = this.simT, L = this.len;
+    const keep = Math.exp(-f("water_drag") * h), mem = f("shape_memory"), grav = f("gravity") * L, turb = f("flutter") * L;
+    const wa = f("wave_amount") * L, ws = f("wave_speed"), il = 30 / L;
+    for (let i = PINNED * COLS; i < NP; i++) {
+      const k = Math.floor(i / COLS) / (ROWS - 1), [px, py] = P[i];
+      const vx = (px - Q[i][0]) * keep, vy = (py - Q[i][1]) * keep; Q[i] = [px, py];
+      const [rx, ry] = this.restWorld(i);
+      let ax = (rx - px) * mem, ay = grav + (ry - py) * mem;
+      ax += nz(px * il + t * 6, py * il) * turb * k; ay += nz(px * il + 300, py * il - t * 6) * turb * k;
+      let ux = P[i - COLS][0] - px, uy = P[i - COLS][1] - py; const ul = Math.hypot(ux, uy) || 1; ux /= ul; uy /= ul;
+      const w = Math.sin(t * ws - k * 3 + this.phase) * Math.sqrt(k) * wa;
+      ax += uy * w; ay -= ux * w;
+      P[i] = [px + vx + ax * h * h, py + vy + ay * h * h];
+    }
+    for (let i = 0; i < PINNED * COLS; i++) { P[i] = this.restWorld(i); Q[i] = [...P[i]]; }
+    const stiff = clamp(f("cloth_stiffness"), 0, 1), bend = clamp(f("cloth_bend"), 0, 1), stretch = 1 + f("stretch"), squash = 1 - f("squash"), pin = PINNED * COLS;
+    for (let it = Math.round(f("cloth_iterations")); it > 0; it--) for (const [a, b, rest, isBend] of this.links) {
+      const wa2 = a < pin ? 0 : 1, wb = b < pin ? 0 : 1; if (wa2 + wb === 0) continue;
+      const dx = P[b][0] - P[a][0], dy = P[b][1] - P[a][1], l = Math.hypot(dx, dy); if (l < 1e-4) continue;
+      const target = isBend ? rest : clamp(l, rest * squash, rest * stretch); if (target === l) continue;
+      const k = (l - target) / l * (isBend ? bend : stiff) / (wa2 + wb);
+      if (wa2) { P[a][0] += dx * k; P[a][1] += dy * k; }
+      if (wb) { P[b][0] -= dx * k; P[b][1] -= dy * k; }
+    }
+    // Stiff neck, fading out down the body.
+    const neck = clamp(f("neck_stiffness"), 0, 1), reach = Math.max(f("neck_length") * (ROWS - 1), .01);
+    if (neck > 0) for (let r = PINNED; r < ROWS; r++) {
+      const fall = 1 - (r - PINNED + 1) / (reach + 1); if (fall <= 0) break;
+      const w = neck * fall * fall;
+      for (let c = 0; c < COLS; c++) { const i = r * COLS + c, [rx, ry] = this.restWorld(i); P[i] = [lerp(P[i][0], rx, w), lerp(P[i][1], ry, w)]; }
+    }
+  }
+  draw() {
+    const pr = ghostProg, u = n => pr.u(n);
+    gl.uniform2f(u("u_center"), this.x, this.y); const quad = 2 * (f("body_length") * (1 + f("stretch")) + .35); gl.uniform2f(u("u_size"), quad * this.len, quad * this.len);
+    const sp = new Float32Array(NP * 2); for (let i = 0; i < NP; i++) { sp[i * 2] = (this.pts[i][0] - this.x) / this.len; sp[i * 2 + 1] = (this.pts[i][1] - this.y) / this.len; }
+    gl.uniform2fv(u("cloth"), sp);
+    const set = (n, v) => gl.uniform1f(u(n), v);
+    set("quad_size", quad); set("head_angle", this.headAngle); set("phase", this.phase);
+    set("look", Math.sin(this.t * .23 + this.phase) * f("look_amount"));
+    set("blink", this.blinkT < 0 ? 0 : Math.sin(Math.PI * this.blinkT / Math.max(f("blink_duration"), .05)));
+    const p = this.presence; set("presence", p * p * (3 - 2 * p));
+    set("body_width", this.pick("body_width")); set("scallops", Math.round(this.pick("scallops")));
+    set("cloth_speed", this.pick("cloth_speed")); set("cloth_amount", f("cloth_amount"));
+    set("opacity", lerp(f("opacity_far"), f("opacity_near"), this.depth)); set("tail_fade", f("tail_fade")); set("glow", f("glow"));
+    set("flicker", f("ghost_flicker")); set("eye_size", f("eye_size")); set("blush_amount", f("blush")); set("outline", f("outline"));
+    for (const c of ["body_color", "rim_color", "blush_color", "eye_color", "glow_color"]) gl.uniform4f(u(c), ...hex(S[c]), 1);
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+  }
+}
+const alive = () => ghosts.filter(g => !g.dying);
+function scheduleSpawn(delay) { pending.push(simTime + delay); }
+function spawnNow() { ghosts.push(new Ghost()); ghosts.sort((a, b) => a.depth - b.depth); }
+function restart() {
+  ghosts = []; pending = []; setupSparkles();
+  for (let i = 0; i < Math.round(f("ghost_count")); i++) scheduleSpawn(i === 0 ? .3 : lerp(1, 1 + i * f("start_stagger"), Math.random()));
+}
+function syncCount() {
+  const want = Math.round(f("ghost_count")), a = alive();
+  for (let i = want; i < a.length; i++) a[i].dying = true;
+  const missing = want - a.length - pending.length;
+  for (let i = 0; i < missing; i++) scheduleSpawn(lerp(.3, 1 + i * f("start_stagger"), Math.random()));
+}
+
+// ---------- Main loop ----------
+let paused = false, speed = 1, last = performance.now(), fps = 60;
+function frame(now) {
+  let dt = Math.min((now - last) / 1000, .05); last = now; fps = lerp(fps, 1 / Math.max(dt, 1e-3), .05);
+  if (paused) dt = 0; dt *= speed;
+  if (gl) {
+    // sub-step at high preview speeds so the cloth stays stable
+    const steps = Math.ceil(dt / (1 / 30)) || 0;
+    for (let s = 0; s < steps; s++) {
+      const h = dt / steps; simTime += h;
+      pending = pending.filter(at => { if (at <= simTime) { if (alive().length < Math.round(f("ghost_count"))) spawnNow(); return false; } return true; });
+      const a = alive(), space = f("personal_space");
+      for (const g of a) g.avoid = [0, 0];
+      for (let i = 0; i < a.length; i++) for (let j = i + 1; j < a.length; j++) {
+        const dx = a[j].x - a[i].x, dy = a[j].y - a[i].y, d = Math.hypot(dx, dy), r = (a[i].len + a[j].len) * space;
+        if (d < r && d > .01) { const k = (1 - d / r) / d; a[i].avoid[0] -= dx * k; a[i].avoid[1] -= dy * k; a[j].avoid[0] += dx * k; a[j].avoid[1] += dy * k; }
+      }
+      for (const g of ghosts) g.update(h);
+      ghosts = ghosts.filter(g => !g.gone);
+    }
+    drawSparkles(dt);
+    const time = simTime;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, sceneFbo); gl.viewport(0, 0, W, H);
+    gl.clearColor(0, 0, 0, 1); gl.clear(gl.COLOR_BUFFER_BIT);
+    gl.enable(gl.BLEND); gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+    // sparkles
+    gl.useProgram(sparkProg.p); gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, sparkTex);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, sparkCanvas);
+    gl.uniform1i(sparkProg.u("tex"), 0); gl.uniform2f(sparkProg.u("u_center"), W / 2, H / 2); gl.uniform2f(sparkProg.u("u_size"), W, H); gl.uniform2f(sparkProg.u("u_res"), W, H);
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+    // ghosts, far ones first
+    gl.useProgram(ghostProg.p); gl.uniform2f(ghostProg.u("u_res"), W, H); gl.uniform1f(ghostProg.u("u_time"), time);
+    for (const g of ghosts) g.draw();
+    gl.disable(gl.BLEND);
+    // screen filter
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, W, H);
+    const pr = S.filter_on ? screenProg : copyProg; gl.useProgram(pr.p);
+    gl.bindTexture(gl.TEXTURE_2D, sceneTex);
+    gl.uniform2f(pr.u("u_center"), W / 2, H / 2); gl.uniform2f(pr.u("u_size"), W, -H); gl.uniform2f(pr.u("u_res"), W, H);
+    if (S.filter_on) {
+      gl.uniform1i(pr.u("screen_tex"), 0); gl.uniform1f(pr.u("u_time"), time); gl.uniform2f(pr.u("u_px"), 1 / W, 1 / H);
+      for (const [n, k] of [["bloom", "bloom"], ["bloom_radius", "bloom_radius"], ["grain", "grain"], ["aberration", "aberration"], ["flicker", "screen_flicker"], ["vignette", "vignette"], ["black_floor", "black_floor"]]) gl.uniform1f(pr.u(n), f(k));
+    } else gl.uniform1i(pr.u("tex"), 0);
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+  }
+  document.getElementById("hud").textContent = `${alive().length} ghosts · ${pending.length} waiting · ${Math.round(fps)} fps${paused ? " · paused" : ""}${speed !== 1 ? ` · ${speed}× speed` : ""}`;
+  requestAnimationFrame(frame);
+}
+
+// ---------- UI ----------
+const groupsEl = document.getElementById("groups"), jsonEl = document.getElementById("json"), rows = {};
+const fmt = (v, step) => { const d = step >= 1 ? 0 : Math.min(3, Math.ceil(-Math.log10(step))); return (+v).toFixed(d); };
+for (const [title, open, ctrls] of GROUPS) {
+  const det = document.createElement("details"); if (open) det.open = true;
+  det.innerHTML = `<summary>${title}</summary><div class="ctrls"></div>`; const box = det.querySelector(".ctrls");
+  for (const [key, label, a, b, step, hint] of ctrls) {
+    const row = document.createElement("div"); row.className = "row"; const id = "c_" + key;
+    if (a === "color") { row.classList.add("color"); row.innerHTML = `<label for="${id}">${label}</label><input type="color" id="${id}">`; }
+    else if (a === "check") { row.classList.add("check"); row.innerHTML = `<label for="${id}">${label}</label><input type="checkbox" id="${id}">`; }
+    else row.innerHTML = `<label for="${id}">${label}</label><span class="val"></span><input type="range" id="${id}" min="${a}" max="${b}" step="${step}">${hint ? `<span class="hint">${hint}</span>` : ""}`;
+    const input = row.querySelector("input");
+    input.addEventListener("input", () => {
+      S[key] = a === "color" ? input.value : a === "check" ? input.checked : (Number.isInteger(DEFAULTS[key]) && step >= 1 ? Math.round(+input.value) : +input.value);
+      onChange(key);
+    });
+    rows[key] = { row, input, kind: a === "color" || a === "check" ? a : "range", step };
+    box.appendChild(row);
+  }
+  groupsEl.appendChild(det);
+}
+function refreshRow(key) {
+  const r = rows[key]; if (!r) return;
+  if (r.kind === "color") r.input.value = S[key]; else if (r.kind === "check") r.input.checked = !!S[key];
+  else { r.input.value = S[key]; r.row.querySelector(".val").textContent = fmt(S[key], r.step); }
+  r.row.classList.toggle("changed", String(S[key]) !== String(DEFAULTS[key]));
+}
+const settingsJson = () => JSON.stringify(Object.fromEntries(Object.keys(DEFAULTS).map(k => [k, S[k]])), null, 2);
+function onChange(key) {
+  refreshRow(key);
+  if (key.startsWith("sparkle_") && key !== "sparkle_color" && key !== "sparkle_speed") setupSparkles();
+  if (key === "ghost_count") syncCount();
+  if (document.activeElement !== jsonEl) jsonEl.value = settingsJson();
+  try { localStorage.setItem("ghost-tweaker-cloth", JSON.stringify(S)); } catch (e) {}
+}
+function refreshAll() { for (const k in rows) refreshRow(k); jsonEl.value = settingsJson(); try { localStorage.setItem("ghost-tweaker-cloth", JSON.stringify(S)); } catch (e) {} }
+function toast(msg) { const t = document.getElementById("toast"); t.textContent = msg; t.classList.add("show"); clearTimeout(toast.h); toast.h = setTimeout(() => t.classList.remove("show"), 1800); }
+
+document.getElementById("btnCopy").onclick = async () => {
+  const txt = settingsJson(); jsonEl.value = txt;
+  try { await navigator.clipboard.writeText(txt); toast("Copied. Paste it into ghost_settings.json"); }
+  catch (e) { document.getElementById("ioBox").open = true; jsonEl.focus(); jsonEl.select(); toast("Copy was blocked. The JSON is selected below: press ⌘C"); }
+};
+document.getElementById("btnApply").onclick = () => {
+  const msg = document.getElementById("jsonMsg");
+  try { const d = JSON.parse(jsonEl.value); let n = 0; for (const k in d) if (k in DEFAULTS) { S[k] = d[k]; n++; }
+    refreshAll(); setupSparkles(); syncCount(); msg.textContent = `Applied ${n} values.`; }
+  catch (e) { msg.textContent = "That isn't valid JSON: " + e.message; }
+};
+document.getElementById("btnReset").onclick = () => { S = Object.assign({}, DEFAULTS); refreshAll(); restart(); toast("Back to the defaults"); };
+document.getElementById("btnRestart").onclick = restart;
+document.getElementById("btnSpawn").onclick = () => spawnNow();
+document.getElementById("btnPause").onclick = e => { paused = !paused; e.target.textContent = paused ? "Resume" : "Pause"; e.target.classList.toggle("on", paused); };
+document.getElementById("selSpeed").onchange = e => { speed = +e.target.value; };
+document.getElementById("btnFull").onclick = async () => { try { await document.getElementById("viewWrap").requestFullscreen(); } catch (e) { toast("Fullscreen isn't allowed here"); } };
+
+refreshAll(); restart();
+// Show a populated scene right away: first ghost already present.
+spawnNow(); ghosts[0].presence = 1; pending.shift();
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
