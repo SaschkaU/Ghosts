@@ -10,7 +10,7 @@ const Sparkles := preload("res://scripts/sparkles.gd")
 const SCREEN_SHADER := preload("res://shaders/spooky_screen.gdshader")
 const IMAGE_DIR := "res://ghost_images"
 
-@export var ghost_count := 9
+@export var ghost_count := 5
 
 var _rng := RandomNumberGenerator.new()
 var _ghost_layer: Node2D
