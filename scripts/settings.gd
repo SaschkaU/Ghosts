@@ -10,14 +10,14 @@ const DEFAULTS := {
 	# Population & lifecycle (seconds)
 	"ghost_count": 5,
 	"start_stagger": 4.0,
-	"life_min": 15.0, "life_max": 55.0,
-	"fade_in_min": 3.0, "fade_in_max": 8.0,
+	"life_min": 9.0, "life_max": 26.0,
+	"fade_in_min": 5.5, "fade_in_max": 16.0,
 	"fade_out_min": 3.0, "fade_out_max": 8.0,
 	"respawn_min": 3.0, "respawn_max": 12.0,
 	# Size & head movement
-	"size_min": 0.52, "size_max": 0.43,          # ghost length, fraction of screen height
+	"size_min": 0.33, "size_max": 0.53,          # ghost length, fraction of screen height
 	"speed_min": 10.0, "speed_max": 131.0,        # px/s at 1080p (small ghosts are slower)
-	"speed_low": 1.6, "speed_high": 1.95,         # surges: slowest / fastest multiplier
+	"speed_low": 2.0, "speed_high": 1.95,         # surges: slowest / fastest multiplier
 	"surge_rate": 30.0,                           # how quickly the speed changes
 	"turn_amount": 3.9,                          # how much the path wanders
 	"turn_rate": 19.0,                           # how quickly the wandering changes
