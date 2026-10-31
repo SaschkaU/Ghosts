@@ -66,8 +66,13 @@ textarea { width: 100%; min-height: 150px; background: #0f0d12; color: var(--cha
 #toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); background: var(--gold); color: #1d1503; padding: 8px 14px; border-radius: 6px; font-weight: 600; opacity: 0; transition: opacity .2s; pointer-events: none; }
 #toast.show { opacity: 1; }
 @media (max-width: 860px) {
-  body { grid-template-columns: 1fr; grid-template-rows: 55vh auto; overflow: auto; }
-  aside { border-left: 0; border-top: 1px solid var(--line); overflow: visible; }
+  /* Preview stays pinned on top; only the settings scroll underneath it. */
+  body { grid-template-columns: 1fr; grid-template-rows: minmax(260px, 50%) 1fr; overflow: hidden; }
+  #stage { padding: 10px 12px; gap: 8px; }
+  #stage .sub { display: none; }
+  h1 { font-size: 26px; }
+  .bar button { padding: 5px 9px; font-size: 12px; }
+  aside { border-left: 0; border-top: 1px solid var(--line); overflow-y: auto; min-height: 0; }
 }
 @media (prefers-reduced-motion: reduce) { #toast { transition: none; } }
 </style>
