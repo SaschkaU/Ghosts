@@ -86,7 +86,14 @@ func _reset() -> void:
 	for g in _ghost_layer.get_children():
 		g.gone.disconnect(_on_ghost_gone)
 		g.queue_free()
+	# Stagger the first appearances instead of popping in all at once.
 	for i in ghost_count:
+		_spawn_later(0.5 if i == 0 else _rng.randf_range(1.0, 4.0 + i * 4.0))
+
+
+func _spawn_later(seconds: float) -> void:
+	await get_tree().create_timer(seconds).timeout
+	if _alive().size() < ghost_count:
 		_spawn()
 
 
@@ -99,9 +106,7 @@ func _spawn() -> void:
 
 func _on_ghost_gone() -> void:
 	# Keep the population steady: something new appears a little later, elsewhere.
-	await get_tree().create_timer(_rng.randf_range(1.0, 6.0)).timeout
-	if _alive().size() < ghost_count:
-		_spawn()
+	_spawn_later(_rng.randf_range(3.0, 12.0))
 
 
 func _alive() -> Array:

@@ -17,7 +17,7 @@ uniform float presence = 1.0;          // 0 = gone, 1 = fully here (dissolve)
 uniform float body_width = 1.0;
 uniform float flare = 0.35;            // how much the cloth widens towards the hem
 uniform float cloth_amount = 1.0;      // strength of the extra cloth ripples
-uniform float cloth_speed = 0.55;      // < 1 = slow motion
+uniform float cloth_speed = 0.3;       // < 1 = slow motion (underwater feel)
 uniform float scallops = 3.0;          // number of lobes on the hem
 uniform float opacity = 0.92;
 uniform float tail_fade = 0.45;        // hem fades into the dark
@@ -71,8 +71,8 @@ void fragment() {
 
 	// Slow ripples in the cloth, nothing at the head, strongest at the hem.
 	float far = clamp(length(p) / 0.8, 0.0, 1.0);
-	vec2 q = p + cloth_amount * far * far * 0.06 *
-			(vec2(fbm(p * 3.0 + vec2(-t * 0.45, t * 0.2)), fbm(p * 3.0 + vec2(5.2, -t * 0.4))) - 0.5);
+	vec2 q = p + cloth_amount * far * far * 0.13 *
+			(vec2(fbm(p * 1.6 + vec2(-t * 0.45, t * 0.2)), fbm(p * 1.6 + vec2(5.2, -t * 0.4))) - 0.5);
 
 	// Tapered tube around the spine chain.
 	float d_tube = 1e5;
@@ -84,7 +84,7 @@ void fragment() {
 		float h = clamp(dot(q - a, ab) / max(dot(ab, ab), 1e-6), 0.0, 1.0);
 		vec2 c = a + ab * h;
 		float s = (float(i) + h) / float(N - 1);
-		float hw = R * (1.0 + flare * s + 0.07 * sin(s * 6.0 - t * 0.8) * s * cloth_amount);
+		float hw = R * (1.0 + flare * s + 0.14 * sin(s * 4.0 - t * 0.8) * s * cloth_amount);
 		float di = length(q - c) - hw;
 		if (di < d_tube) {
 			d_tube = di;
@@ -102,12 +102,15 @@ void fragment() {
 	float along = dot(q - tail_end, te);
 	float xl = dot(q - tail_end, tp) / hw_end;
 	float d_ext = max(abs(dot(q - tail_end, tp)) - hw_end, -along);
-	float lobe_x = scallops * 1.5708 * (xl + 1.0) + 0.25 * sin(t * 0.7 + xl * 2.0) * cloth_amount;
+	float lobe_x = scallops * 1.5708 * (xl + 1.0) + 0.45 * sin(t * 0.7 + xl * 2.0) * cloth_amount;
 	float lobe = pow(abs(sin(lobe_x)), 0.45);
 	float hem = 0.035 - 0.04 * (1.0 - lobe)
-			  + cloth_amount * (0.016 * sin(t * 1.6 + xl * 4.0) + 0.01 * sin(t * 0.9 - xl * 2.0));
-	float d_body = max(min(d_tube, d_ext), along - hem);
-	if (along > 0.0 && d_ext < d_tube) { s_body = 1.0; x_body = xl; }
+			  + cloth_amount * (0.03 * sin(t * 1.2 + xl * 3.0) + 0.02 * sin(t * 0.7 - xl * 2.0));
+	// Only cut the hem near the tail end, so a body curling back on itself
+	// doesn't get sliced by the hem line.
+	float near_end = step(length(q - tail_end), hw_end * 1.8);
+	float d_body = mix(d_tube, max(min(d_tube, d_ext), along - hem), near_end);
+	if (near_end > 0.5 && along > 0.0 && d_ext < d_tube) { s_body = 1.0; x_body = xl; }
 
 	float d_head = length(q) - R;
 	float d = smin(d_head, d_body, 0.04);
@@ -151,7 +154,7 @@ void fragment() {
 	col = mix(col, blush_color.rgb, (1.0 - smoothstep(-0.3, 0.1, blush)) * scribble * 0.9);
 
 	// Appear / vanish: a smoky dissolve, head first, hem last, with a glowing edge.
-	float n = fbm(p * 2.5 + phase * 3.1) * 0.75 + far * 0.35;
+	float n = fbm(p * 2.5 + phase * 3.1) * 0.3 + s_body * 0.75;
 	float pres = smoothstep(n - 0.1, n + 0.1, presence * 1.3 - 0.1);
 	float ecto = pres * (1.0 - pres) * 4.0 * step(0.001, presence) * step(presence, 0.999);
 

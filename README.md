@@ -38,15 +38,15 @@ export templates the first time.
 | --- | --- |
 | `shaders/ghost.gdshader` | Draws one ghost: chalk body, pink rim, eyes, blush, scalloped hem. The cloth motion lives here. |
 | `shaders/spooky_screen.gdshader` | Full-screen filter: bloom, film grain, chromatic fringe, projector flicker, vignette. Darks are clamped to true black so the projector shows nothing between ghosts. |
-| `scripts/ghost.gd` | Slow noise-driven wandering. The head leads and turns into curves; the body is a chain simulated like cloth (inertia, bending stiffness, air flutter) so it trails with follow-through. Each ghost materializes, lives 18–40 s, then dissolves. |
-| `scripts/main.gd` | Keeps 5 ghosts around (a new one appears a few seconds after one dissolves), keeps them apart, handles keys and screens. |
+| `scripts/ghost.gd` | Only the head is driven: it wanders with surges and pauses and turns and glances on its own. The body is a loose chain simulated like cloth (inertia, slight stretch, light bending stiffness, air flutter) that is dragged along behind. Each ghost materializes, lives 15–55 s, then dissolves. |
+| `scripts/main.gd` | Keeps up to 5 ghosts around, staggered: they appear one by one at the start, and a new one appears 3–12 s after one dissolves, keeps them apart, handles keys and screens. |
 | `scripts/sparkles.gd` | Twinkling gold chalk crosses. |
 
 ### Tuning the look
 
 The cloth feel is set at the top of `scripts/ghost.gd`: `stiffness`,
-`neck_stiffness`, `keep_velocity` (more = more swing and follow-through) and
-`flutter`.
+`stretch`, `keep_velocity` (more = more drag, swing and follow-through),
+`flutter`, and the big slow underwater undulation `wave_amount` / `wave_speed`.
 
 The look is set by the defaults at the top of `shaders/ghost.gdshader`
 (`cloth_amount`, `cloth_speed`, `flare`, `scallops`, `tail_fade`, `glow`, colours)

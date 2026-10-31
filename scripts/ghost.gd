@@ -1,10 +1,11 @@
 extends Sprite2D
 ## One wandering ghost.
 ##
-## The head leads: it moves along a slow, noise-driven path and turns its face
-## into the turn. The body is a chain of points simulated like cloth (verlet
-## with inertia, bending stiffness and a little air flutter), so it trails the
-## head and carries follow-through after every turn. shaders/ghost.gdshader
+## Only the head is driven: it moves along a slow, noise-driven path with
+## surges and pauses, and turns and looks around on its own. The body is a
+## loose chain of points simulated like cloth (verlet with inertia, a little
+## stretch, light bending stiffness and air flutter) that just hangs off the
+## head and gets dragged along behind it. shaders/ghost.gdshader
 ## draws the body around that chain.
 ##
 ## Each ghost has a lifetime: it materializes, drifts for a while, then
@@ -20,10 +21,12 @@ const BODY := 0.72            # head centre to hem, in ghost lengths
 static var _white_tex: Texture2D
 
 ## Cloth feel.
-@export var stiffness := 0.22       # 0 = limp rope, 1 = stiff stick
-@export var neck_stiffness := 0.6   # how firmly the first segment follows the head
-@export var keep_velocity := 0.35   # per second; higher = more follow-through / swing
-@export var flutter := 0.2          # air turbulence on the cloth, in ghost lengths / s²
+@export var stiffness := 0.1        # 0 = limp rope, 1 = stiff stick
+@export var stretch := 0.3          # how much the cloth may stretch when yanked (0.3 = 30 %)
+@export var keep_velocity := 0.6    # per second; higher = more drag, swing and follow-through
+@export var flutter := 0.4          # slow turbulence on the cloth, in ghost lengths / s²
+@export var wave_amount := 0.9      # big slow undulation travelling down the body
+@export var wave_speed := 0.6       # radians / s; low = slow-motion, underwater feel
 
 var heading := 0.0          # direction of travel, radians
 var head_angle := 0.0       # direction the head faces (leads into turns)
@@ -50,7 +53,7 @@ var _prev := PackedVector2Array()
 var _seg := 10.0
 
 
-func setup(rng: RandomNumberGenerator, screen: Vector2, lifetime := Vector2(18.0, 40.0)) -> void:
+func setup(rng: RandomNumberGenerator, screen: Vector2, lifetime := Vector2(15.0, 55.0)) -> void:
 	area = Rect2(Vector2.ZERO, screen)
 	_noise.seed = rng.randi()
 	_noise.frequency = 0.02
@@ -78,7 +81,7 @@ func setup(rng: RandomNumberGenerator, screen: Vector2, lifetime := Vector2(18.0
 	_mat.set_shader_parameter("body_width", rng.randf_range(0.8, 1.15))
 	_mat.set_shader_parameter("flare", rng.randf_range(0.15, 0.5))
 	_mat.set_shader_parameter("scallops", float(rng.randi_range(2, 4)))
-	_mat.set_shader_parameter("cloth_speed", rng.randf_range(0.4, 0.7))
+	_mat.set_shader_parameter("cloth_speed", rng.randf_range(0.22, 0.35))
 	_mat.set_shader_parameter("opacity", lerpf(0.65, 0.95, depth))  # far ghosts are dimmer
 	_mat.set_shader_parameter("presence", 0.0)
 	material = _mat
@@ -86,8 +89,8 @@ func setup(rng: RandomNumberGenerator, screen: Vector2, lifetime := Vector2(18.0
 	position = Vector2(rng.randf_range(0.15, 0.85) * screen.x, rng.randf_range(0.15, 0.85) * screen.y)
 	heading = rng.randf() * TAU
 	head_angle = heading
-	_appear_time = rng.randf_range(3.0, 5.0)
-	_vanish_time = rng.randf_range(3.0, 5.0)
+	_appear_time = rng.randf_range(3.0, 8.0)
+	_vanish_time = rng.randf_range(3.0, 8.0)
 	_life_left = rng.randf_range(lifetime.x, lifetime.y)
 	_blink_in = rng.randf_range(1.0, 6.0)
 
@@ -127,13 +130,16 @@ func _move(delta: float) -> void:
 	turn_rate = lerpf(turn_rate, target_turn, delta * 1.2)
 	heading += turn_rate * delta
 
-	var spd := speed * (0.7 + 0.45 * (_noise.get_noise_2d(0.0, _t * 6.0) + 1.0) * 0.5)
+	# Surges and near-pauses, so the body visibly drags and catches up.
+	var surge := clampf(_noise.get_noise_2d(0.0, _t * 6.0) * 1.6 + 0.5, 0.0, 1.0)
+	var spd := speed * lerpf(0.2, 1.4, surge * surge)
 	var dir := Vector2.from_angle(heading)
 	var bob := dir.orthogonal() * sin(_t * 1.3 + _bob_phase) * 8.0
 	position += dir * spd * delta + bob * delta
 
-	# The head leads: it looks a little into the turn, ahead of the body.
-	head_angle = lerp_angle(head_angle, heading + clampf(turn_rate * 0.6, -0.6, 0.6), delta * 2.5)
+	# The head turns on its own: into the curve and glancing around.
+	var glance := _noise.get_noise_2d(500.0, _t * 4.0) * 0.7
+	head_angle = lerp_angle(head_angle, heading + clampf(turn_rate * 0.6, -0.6, 0.6) + glance, delta * 2.0)
 
 
 func _simulate_cloth(delta: float) -> void:
@@ -144,21 +150,26 @@ func _simulate_cloth(delta: float) -> void:
 		var k := float(i) / float(N - 1)
 		var v := (_pts[i] - _prev[i]) * damp
 		_prev[i] = _pts[i]
-		var air := Vector2(_noise.get_noise_2d(i * 13.0, _t * 25.0), _noise.get_noise_2d(i * 13.0 + 300.0, _t * 25.0))
-		_pts[i] += v + air * fl * k * 60.0
+		var air := Vector2(_noise.get_noise_2d(i * 13.0, _t * 6.0), _noise.get_noise_2d(i * 13.0 + 300.0, _t * 6.0))
+		# Slow sideways wave travelling from the head to the hem, like cloth under water.
+		var side := (_pts[i - 1] - _pts[i]).normalized().orthogonal()
+		var wave := sin(_t * wave_speed - k * 2.5 + _phase) * wave_amount * length_px * k
+		_pts[i] += v + air * fl * k * 60.0 + side * wave * delta * delta
 
-	var back := -Vector2.from_angle(head_angle)
-	for _iter in 4:
+	# The body hangs off the head at a single point, so the head can turn
+	# freely; everything below just follows.
+	for _iter in 3:
 		for i in range(1, N):
-			# Bending stiffness: pull towards the straight continuation.
-			var dir_prev := back if i == 1 else (_pts[i - 1] - _pts[i - 2]).normalized()
-			var straight := _pts[i - 1] + dir_prev * _seg
-			_pts[i] = _pts[i].lerp(straight, neck_stiffness if i == 1 else stiffness)
-			# Keep segment length (cloth doesn't stretch).
+			# Light bending stiffness: pull towards the straight continuation.
+			if i >= 2:
+				var straight := _pts[i - 1] + (_pts[i - 1] - _pts[i - 2]).normalized() * _seg
+				_pts[i] = _pts[i].lerp(straight, stiffness)
+			# Segment length: springy, may stretch a bit when the head pulls.
 			var d := _pts[i] - _pts[i - 1]
 			var l := d.length()
 			if l > 0.0001:
-				_pts[i] = _pts[i - 1] + d / l * _seg
+				var target := clampf(lerpf(l, _seg, 0.35), _seg * 0.92, _seg * (1.0 + stretch))
+				_pts[i] = _pts[i - 1] + d / l * target
 
 
 func _push_spine() -> void:
