@@ -98,7 +98,7 @@ void fragment() {
 
 	// Square off the tail end and give it a scalloped, fluttering hem.
 	vec2 tail_end = spine[N - 1];
-	vec2 te = normalize(tail_end - spine[N - 2] + vec2(1e-6));
+	vec2 te = normalize(tail_end - spine[N - 3] + vec2(1e-6));   // smoothed tail direction
 	vec2 tp = vec2(-te.y, te.x);
 	float hw_end = R * (1.0 + flare);
 	float along = dot(q - tail_end, te);

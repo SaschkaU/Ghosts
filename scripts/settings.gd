@@ -28,7 +28,8 @@ const DEFAULTS := {
 	"personal_space": 0.4,                       # how far ghosts keep apart
 	# Cloth simulation (the body)
 	"body_length": 0.72,                         # head centre to hem, in ghost lengths
-	"stiffness": 0.1,
+	"stiffness": 0.02,                           # pull towards straight per step (0 = limp)
+	"max_bend": 28.0,                            # max bend per joint, degrees
 	"stretch": 0.3,
 	"keep_velocity": 0.6,
 	"flutter": 0.4,

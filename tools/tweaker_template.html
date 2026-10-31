@@ -142,7 +142,8 @@ const GROUPS = [
   ]],
   ["Cloth body", true, [
     ["body_length", "Body length", 0.3, 1.2, 0.01, "Head to hem, in ghost lengths."],
-    ["stiffness", "Stiffness", 0, 0.8, 0.01, "Low = limp, flowing cloth."],
+    ["stiffness", "Straightening", 0, 0.3, 0.005, "Pull back towards straight. 0 = limp, flowing chain."],
+    ["max_bend", "Max bend per joint (°)", 2, 90, 1, "How far each of the 9 joints may bend."],
     ["stretch", "Stretch when pulled", 0, 1, 0.01],
     ["keep_velocity", "Drag / follow-through", 0, 0.98, 0.01, "Higher = more swing after the head moves."],
     ["flutter", "Turbulence", 0, 3, 0.05],
@@ -187,7 +188,7 @@ const GROUPS = [
 ];
 
 let S = Object.assign({}, DEFAULTS);
-try { const saved = JSON.parse(localStorage.getItem("ghost-tweaker") || "null"); if (saved) for (const k in saved) if (k in DEFAULTS) S[k] = saved[k]; } catch (e) {}
+try { const saved = JSON.parse(localStorage.getItem("ghost-tweaker") || "null"); if (saved && !("max_bend" in saved)) delete saved.stiffness; /* old stiffness meant something else */ if (saved) for (const k in saved) if (k in DEFAULTS) S[k] = saved[k]; } catch (e) {}
 const f = k => +S[k];
 const randRange = k => { const a = f(k + "_min"), b = Math.max(a, f(k + "_max")); return a + Math.random() * (b - a); };
 const lerp = (a, b, t) => a + (b - a) * t;
@@ -320,22 +321,8 @@ class Ghost {
     const lead = clamp(this.turnRate * f("head_lead"), -.8, .8), glance = nz(500, t * 4) * f("glance");
     this.headAngle = lerpAngle(this.headAngle, this.heading + lead + glance, Math.min(1, dt * f("head_turn_speed")));
     // cloth
-    const P = this.pts, Q = this.prev; P[0] = [this.x, this.y];
-    const damp = Math.pow(clamp(f("keep_velocity"), 0, .99), dt), fl = f("flutter") * this.len * dt * dt;
-    for (let i = 1; i < N; i++) {
-      const k = i / (N - 1), vx = (P[i][0] - Q[i][0]) * damp, vy = (P[i][1] - Q[i][1]) * damp; Q[i] = [...P[i]];
-      const ax = nz(i * 13, t * 6), ay = nz(i * 13 + 300, t * 6);
-      let sx = P[i - 1][0] - P[i][0], sy = P[i - 1][1] - P[i][1]; const sl = Math.hypot(sx, sy) || 1; [sx, sy] = [-sy / sl, sx / sl];
-      const wave = Math.sin(t * f("wave_speed") - k * 2.5 + this.phase) * f("wave_amount") * this.len * k;
-      P[i] = [P[i][0] + vx + ax * fl * k * 60 + sx * wave * dt * dt, P[i][1] + vy + ay * fl * k * 60 + sy * wave * dt * dt];
-    }
-    const st = f("stiffness"), stretch = f("stretch");
-    for (let it = 0; it < 3; it++) for (let i = 1; i < N; i++) {
-      if (i >= 2) { let ex = P[i - 1][0] - P[i - 2][0], ey = P[i - 1][1] - P[i - 2][1]; const el = Math.hypot(ex, ey) || 1;
-        P[i] = [lerp(P[i][0], P[i - 1][0] + ex / el * this.seg, st), lerp(P[i][1], P[i - 1][1] + ey / el * this.seg, st)]; }
-      const ddx = P[i][0] - P[i - 1][0], ddy = P[i][1] - P[i - 1][1], l = Math.hypot(ddx, ddy);
-      if (l > 1e-4) { const tl = clamp(lerp(l, this.seg, .35), this.seg * .92, this.seg * (1 + stretch)); P[i] = [P[i - 1][0] + ddx / l * tl, P[i - 1][1] + ddy / l * tl]; }
-    }
+    this.simAcc = (this.simAcc || 0) + dt; this.simT = this.simT || 0;
+    while (this.simAcc >= 1 / 60) { this.simAcc -= 1 / 60; this.simT += 1 / 60; this.clothStep(1 / 60); }
     // blinking
     const dur = Math.max(f("blink_duration"), .05);
     if (this.blinkT < 0) { this.blinkIn -= dt; if (this.blinkIn <= 0) this.blinkT = 0; }
@@ -344,6 +331,33 @@ class Ghost {
     this.life -= dt; if (this.life <= 0) this.dying = true;
     if (this.dying) { this.presence = Math.max(this.presence - dt / this.vanishT, 0); if (this.presence <= 0) { this.gone = true; scheduleSpawn(randRange("respawn")); } }
     else this.presence = Math.min(this.presence + dt / this.appear, 1);
+  }
+  // Joint chain hanging off the head: follow-the-leader with momentum, joint limits and a travelling wave.
+  clothStep(h) {
+    const P = this.pts, Q = this.prev, nz = this.noise, t = this.simT; P[0] = [this.x, this.y];
+    const damp = Math.pow(clamp(f("keep_velocity"), 0, .99), h), fl = f("flutter") * this.len * h * h * 60;
+    const wa = f("wave_amount") * this.len * h * h, ws = f("wave_speed");
+    for (let i = 1; i < N; i++) {
+      const k = i / (N - 1), vx = (P[i][0] - Q[i][0]) * damp, vy = (P[i][1] - Q[i][1]) * damp; Q[i] = [...P[i]];
+      const ax = nz(i * 13, t * 6), ay = nz(i * 13 + 300, t * 6);
+      let sx = P[i - 1][0] - P[i][0], sy = P[i - 1][1] - P[i][1]; const sl = Math.hypot(sx, sy) || 1; [sx, sy] = [-sy / sl, sx / sl];
+      const w = Math.sin(t * ws - k * 3 + this.phase) * Math.sqrt(k) * wa, sk = Math.sqrt(k);
+      P[i] = [P[i][0] + vx + ax * fl * sk + sx * w, P[i][1] + vy + ay * fl * sk + sy * w];
+    }
+    const st = f("stiffness"), maxBend = f("max_bend") * Math.PI / 180, stretch = f("stretch");
+    let pdx = -Math.cos(this.heading), pdy = -Math.sin(this.heading);
+    for (let i = 1; i < N; i++) {
+      let dx = P[i][0] - P[i - 1][0], dy = P[i][1] - P[i - 1][1], l = Math.hypot(dx, dy);
+      if (l < 1e-4) { dx = pdx * this.seg; dy = pdy * this.seg; l = this.seg; }
+      dx /= l; dy /= l;
+      if (i >= 2) {
+        let ang = Math.atan2(pdx * dy - pdy * dx, pdx * dx + pdy * dy);
+        ang = clamp(ang * (1 - st), -maxBend, maxBend);
+        const c = Math.cos(ang), s2 = Math.sin(ang); dx = pdx * c - pdy * s2; dy = pdx * s2 + pdy * c;
+      }
+      const tl = clamp(lerp(l, this.seg, .5), this.seg * .95, this.seg * (1 + stretch));
+      P[i] = [P[i - 1][0] + dx * tl, P[i - 1][1] + dy * tl]; pdx = dx; pdy = dy;
+    }
   }
   draw() {
     const pr = ghostProg, u = n => pr.u(n);

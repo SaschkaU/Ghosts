@@ -19,6 +19,7 @@ const S := preload("res://scripts/settings.gd")
 const GHOST_SHADER := preload("res://shaders/ghost.gdshader")
 const N := 10                 # must match N in the shader
 const QUAD := 2.4             # quad side in ghost lengths
+const SIM_DT := 1.0 / 60.0
 
 static var _white_tex: Texture2D
 
@@ -46,6 +47,8 @@ var _mat: ShaderMaterial
 var _pts := PackedVector2Array()
 var _prev := PackedVector2Array()
 var _seg := 10.0
+var _sim_acc := 0.0
+var _sim_t := 0.0
 var _rand := {}             # per-ghost 0..1 picks, so live setting changes keep each ghost's character
 
 
@@ -154,35 +157,52 @@ func _move(delta: float) -> void:
 
 
 func _simulate_cloth(delta: float) -> void:
+	# Fixed 60 Hz steps so the feel doesn't depend on the frame rate.
+	_sim_acc += delta
+	while _sim_acc >= SIM_DT:
+		_sim_acc -= SIM_DT
+		_sim_t += SIM_DT
+		_cloth_step(SIM_DT)
+
+
+## The body is a joint chain hanging off the head. Each joint is dragged by
+## the one in front of it (follow-the-leader), keeps some momentum so it swings
+## and overshoots, and can only bend so far, like vertebrae. A slow wave and
+## turbulence push sideways along the whole length, not just the tip.
+func _cloth_step(h: float) -> void:
 	_pts[0] = position
-	var damp := pow(clampf(S.f("keep_velocity"), 0.0, 0.99), delta)
-	var fl := S.f("flutter") * length_px * delta * delta
-	var wave_amount := S.f("wave_amount")
+	var damp := pow(clampf(S.f("keep_velocity"), 0.0, 0.99), h)
+	var fl := S.f("flutter") * length_px * h * h * 60.0
+	var wave_amount := S.f("wave_amount") * length_px * h * h
 	var wave_speed := S.f("wave_speed")
 	for i in range(1, N):
 		var k := float(i) / float(N - 1)
 		var v := (_pts[i] - _prev[i]) * damp
 		_prev[i] = _pts[i]
-		var air := Vector2(_noise.get_noise_2d(i * 13.0, _t * 6.0), _noise.get_noise_2d(i * 13.0 + 300.0, _t * 6.0))
-		# Slow sideways wave travelling from the head to the hem, like cloth under water.
+		var air := Vector2(_noise.get_noise_2d(i * 13.0, _sim_t * 6.0), _noise.get_noise_2d(i * 13.0 + 300.0, _sim_t * 6.0))
 		var side := (_pts[i - 1] - _pts[i]).normalized().orthogonal()
-		var wave := sin(_t * wave_speed - k * 2.5 + _phase) * wave_amount * length_px * k
-		_pts[i] += v + air * fl * k * 60.0 + side * wave * delta * delta
+		var wave := sin(_sim_t * wave_speed - k * 3.0 + _phase) * sqrt(k)
+		_pts[i] += v + air * fl * sqrt(k) + side * wave * wave_amount
 
-	# The body hangs off the head at a single point, so the head can turn
-	# freely; everything below just follows.
-	var stiffness := S.f("stiffness")
+	var straighten := S.f("stiffness")
+	var max_bend := deg_to_rad(S.f("max_bend"))
 	var stretch := S.f("stretch")
-	for _iter in 3:
-		for i in range(1, N):
-			if i >= 2:
-				var straight := _pts[i - 1] + (_pts[i - 1] - _pts[i - 2]).normalized() * _seg
-				_pts[i] = _pts[i].lerp(straight, stiffness)
-			var d := _pts[i] - _pts[i - 1]
-			var l := d.length()
-			if l > 0.0001:
-				var target := clampf(lerpf(l, _seg, 0.35), _seg * 0.92, _seg * (1.0 + stretch))
-				_pts[i] = _pts[i - 1] + d / l * target
+	var prev_dir := -Vector2.from_angle(heading)   # first joint may swing freely around the head
+	for i in range(1, N):
+		var d := _pts[i] - _pts[i - 1]
+		var l := d.length()
+		if l < 0.0001:
+			d = prev_dir * _seg
+			l = _seg
+		var dir := d / l
+		if i >= 2:
+			# Joint limit, plus a gentle pull towards straight.
+			var ang := prev_dir.angle_to(dir)
+			ang = clampf(ang * (1.0 - straighten), -max_bend, max_bend)
+			dir = prev_dir.rotated(ang)
+		var target := clampf(lerpf(l, _seg, 0.5), _seg * 0.95, _seg * (1.0 + stretch))
+		_pts[i] = _pts[i - 1] + dir * target
+		prev_dir = dir
 
 
 func _push_spine() -> void:
