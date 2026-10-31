@@ -18,7 +18,7 @@
   "surge_rate": 30,
   "turn_amount": 3.9,
   "turn_rate": 19,
-  "head_lead": 1.75,
+  "head_lead": 0,
   "glance": 0.7,
   "head_turn_speed": 2,
   "bob": 8,

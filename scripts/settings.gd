@@ -21,7 +21,7 @@ const DEFAULTS := {
 	"surge_rate": 30.0,                           # how quickly the speed changes
 	"turn_amount": 3.9,                          # how much the path wanders
 	"turn_rate": 19.0,                           # how quickly the wandering changes
-	"head_lead": 1.75,                            # head looks into turns
+	"head_lead": 0.0,                            # head looks into turns
 	"glance": 0.7,                               # head looks around on its own
 	"head_turn_speed": 2.0,
 	"bob": 8.0,                                  # sideways floating wobble, px
