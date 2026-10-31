@@ -142,6 +142,8 @@ const GROUPS = [
   ]],
   ["Cloth simulation", true, [
     ["body_length", "Body length", 0.3, 1.2, 0.01, "Head to hem, in ghost lengths."],
+    ["neck_stiffness", "Neck stiffness", 0, 1, 0.01, "Holds the cloth just below the head in shape, so the head blends gradually into the body."],
+    ["neck_length", "Neck stiffness reach", 0, 1, 0.01, "How far down the body the stiffness fades out (fraction of the body)."],
     ["water_drag", "Water drag", 0, 6, 0.05, "Speed lost per second. Higher = thicker water, slower billowing."],
     ["shape_memory", "Shape memory", 0, 8, 0.05, "Pull back to hanging straight behind the head. 0 = completely limp."],
     ["cloth_stiffness", "Stretch & shear springs", 0, 1, 0.01],
@@ -382,6 +384,13 @@ class Ghost {
       const k = (l - target) / l * (isBend ? bend : stiff) / (wa2 + wb);
       if (wa2) { P[a][0] += dx * k; P[a][1] += dy * k; }
       if (wb) { P[b][0] -= dx * k; P[b][1] -= dy * k; }
+    }
+    // Stiff neck, fading out down the body.
+    const neck = clamp(f("neck_stiffness"), 0, 1), reach = Math.max(f("neck_length") * (ROWS - 1), .01);
+    if (neck > 0) for (let r = PINNED; r < ROWS; r++) {
+      const fall = 1 - (r - PINNED + 1) / (reach + 1); if (fall <= 0) break;
+      const w = neck * fall * fall;
+      for (let c = 0; c < COLS; c++) { const i = r * COLS + c, [rx, ry] = this.restWorld(i); P[i] = [lerp(P[i][0], rx, w), lerp(P[i][1], ry, w)]; }
     }
   }
   draw() {

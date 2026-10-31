@@ -269,6 +269,20 @@ func _cloth_step(h: float) -> void:
 			_pts[a] += corr * wa
 			_pts[b] -= corr * wb
 
+	# Stiff neck: the rows just below the head are held towards their hanging
+	# shape, fading out gradually down the body, so the head blends into the cloth.
+	var neck := clampf(S.f("neck_stiffness"), 0.0, 1.0)
+	var reach := maxf(S.f("neck_length") * float(ROWS - 1), 0.01)
+	if neck > 0.0:
+		for r in range(PINNED_ROWS, ROWS):
+			var fall := 1.0 - float(r - PINNED_ROWS + 1) / (reach + 1.0)
+			if fall <= 0.0:
+				break
+			var w := neck * fall * fall
+			for c in COLS:
+				var i := r * COLS + c
+				_pts[i] = _pts[i].lerp(_rest_world(i), w)
+
 
 func _push_spine() -> void:
 	var local := PackedVector2Array()

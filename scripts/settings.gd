@@ -28,6 +28,8 @@ const DEFAULTS := {
 	"personal_space": 0.4,                       # how far ghosts keep apart
 	# Cloth simulation (the body): a mass-spring grid pinned to the head
 	"body_length": 0.97,                         # head centre to hem, in ghost lengths
+	"neck_stiffness": 0.35,                      # holds the rows below the head in shape
+	"neck_length": 0.4,                          # how far down that fades out (fraction of the body)
 	"cloth_stiffness": 0.15,                      # stretch & shear springs, 0..1
 	"cloth_bend": 0.48,                           # bend springs, 0 = crumples, 1 = stiff sheet
 	"stretch": 0.35,                             # how far the cloth may stretch

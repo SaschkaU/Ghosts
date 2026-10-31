@@ -24,6 +24,8 @@
   "bob": 8,
   "personal_space": 0.4,
   "body_length": 0.97,
+  "neck_stiffness": 0.35,
+  "neck_length": 0.4,
   "cloth_stiffness": 0.15,
   "cloth_bend": 0.48,
   "stretch": 0.35,
