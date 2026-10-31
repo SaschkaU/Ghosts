@@ -15,8 +15,8 @@ const DEFAULTS := {
 	"fade_out_min": 3.0, "fade_out_max": 8.0,
 	"respawn_min": 3.0, "respawn_max": 12.0,
 	# Size & head movement
-	"size_min": 0.33, "size_max": 0.53,          # ghost length, fraction of screen height
-	"speed_min": 10.0, "speed_max": 131.0,        # px/s at 1080p (small ghosts are slower)
+	"size_min": 0.33, "size_max": 0.19,          # ghost length, fraction of screen height
+	"speed_min": 99, "speed_max": 131.0,        # px/s at 1080p (small ghosts are slower)
 	"speed_low": 2.0, "speed_high": 1.95,         # surges: slowest / fastest multiplier
 	"surge_rate": 30.0,                           # how quickly the speed changes
 	"turn_amount": 3.9,                          # how much the path wanders
@@ -27,18 +27,18 @@ const DEFAULTS := {
 	"bob": 8.0,                                  # sideways floating wobble, px
 	"personal_space": 0.4,                       # how far ghosts keep apart
 	# Cloth simulation (the body): a mass-spring grid pinned to the head
-	"body_length": 0.83,                         # head centre to hem, in ghost lengths
-	"cloth_stiffness": 0.9,                      # stretch & shear springs, 0..1
-	"cloth_bend": 0.06,                           # bend springs, 0 = crumples, 1 = stiff sheet
-	"stretch": 0.1,                             # how far the cloth may stretch
-	"squash": 0.5,                              # how far it may bunch up (like folding)
-	"water_drag": 1.0,                           # velocity lost per second; higher = thicker water
-	"shape_memory": 0.2,                         # pull back to hanging straight behind the head
-	"gravity": 0.0,                              # downward pull, ghost lengths/s²
-	"flutter": 1.0,                              # slow currents pushing the cloth around
-	"wave_amount": 1.5,                          # travelling wave along the body
+	"body_length": 0.97,                         # head centre to hem, in ghost lengths
+	"cloth_stiffness": 0.15,                      # stretch & shear springs, 0..1
+	"cloth_bend": 0.48,                           # bend springs, 0 = crumples, 1 = stiff sheet
+	"stretch": 0.35,                             # how far the cloth may stretch
+	"squash": 0.48,                              # how far it may bunch up (like folding)
+	"water_drag": 3.6,                           # velocity lost per second; higher = thicker water
+	"shape_memory": 0,                         # pull back to hanging straight behind the head
+	"gravity": -1.35,                              # downward pull, ghost lengths/s²
+	"flutter": 0.55,                              # slow currents pushing the cloth around
+	"wave_amount": 0.55,                          # travelling wave along the body
 	"wave_speed": 0.6,
-	"cloth_iterations": 6,                       # spring solver passes per step
+	"cloth_iterations": 9,                       # spring solver passes per step
 	# Shape (randomized per ghost between min and max)
 	"body_width_min": 0.8, "body_width_max": 1.15,
 	"flare_min": 0.5, "flare_max": 0.9,
