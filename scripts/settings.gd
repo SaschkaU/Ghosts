@@ -26,18 +26,22 @@ const DEFAULTS := {
 	"head_turn_speed": 2.0,
 	"bob": 8.0,                                  # sideways floating wobble, px
 	"personal_space": 0.4,                       # how far ghosts keep apart
-	# Cloth simulation (the body)
+	# Cloth simulation (the body): a mass-spring grid pinned to the head
 	"body_length": 0.83,                         # head centre to hem, in ghost lengths
-	"stiffness": 0.02,                           # pull towards straight per step (0 = limp)
-	"max_bend": 28.0,                            # max bend per joint, degrees
-	"stretch": 0.56,
-	"keep_velocity": 0.0,
-	"flutter": 0.3,
-	"wave_amount": 1.15,
-	"wave_speed": 0.25,
+	"cloth_stiffness": 0.9,                      # stretch & shear springs, 0..1
+	"cloth_bend": 0.06,                           # bend springs, 0 = crumples, 1 = stiff sheet
+	"stretch": 0.1,                             # how far the cloth may stretch
+	"squash": 0.5,                              # how far it may bunch up (like folding)
+	"water_drag": 1.0,                           # velocity lost per second; higher = thicker water
+	"shape_memory": 0.2,                         # pull back to hanging straight behind the head
+	"gravity": 0.0,                              # downward pull, ghost lengths/s²
+	"flutter": 1.0,                              # slow currents pushing the cloth around
+	"wave_amount": 1.5,                          # travelling wave along the body
+	"wave_speed": 0.6,
+	"cloth_iterations": 6,                       # spring solver passes per step
 	# Shape (randomized per ghost between min and max)
 	"body_width_min": 0.8, "body_width_max": 1.15,
-	"flare_min": 0.15, "flare_max": 0.5,
+	"flare_min": 0.5, "flare_max": 0.9,
 	"scallops_min": 2, "scallops_max": 4,
 	# Shader cloth detail
 	"cloth_amount": 0.75,

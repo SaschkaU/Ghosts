@@ -3,10 +3,11 @@ extends Sprite2D
 ##
 ## Only the head is driven: it moves along a slow, noise-driven path with
 ## surges and pauses, and turns and looks around on its own. The body is a
-## loose chain of points simulated like cloth (verlet with inertia, a little
-## stretch, light bending stiffness, a slow travelling wave and turbulence)
-## that hangs off the head and gets dragged along behind it.
-## shaders/ghost.gdshader draws the body around that chain.
+## real piece of cloth: a ROWS x COLS mass-spring grid (verlet particles with
+## stretch, shear and bend springs) whose top rows are pinned to the head.
+## Water drag, a weak memory of its hanging shape, slow currents and a
+## travelling wave push it around, so it trails, folds and billows behind the
+## head like fabric underwater. shaders/ghost.gdshader draws its outline.
 ##
 ## Each ghost has a lifetime: it materializes, drifts for a while, then
 ## dissolves. main.gd spawns a new one somewhere else afterwards.
@@ -17,7 +18,9 @@ signal gone
 
 const S := preload("res://scripts/settings.gd")
 const GHOST_SHADER := preload("res://shaders/ghost.gdshader")
-const N := 10                 # must match N in the shader
+const ROWS := 10              # must match ROWS / COLS in the shader
+const COLS := 5
+const PINNED_ROWS := 2        # rows fixed to the head
 const SIM_DT := 1.0 / 60.0
 
 static var _white_tex: Texture2D
@@ -43,9 +46,12 @@ var _life_left := 30.0
 var _blink_in := 3.0
 var _blink_t := -1.0        # < 0 = eyes open
 var _mat: ShaderMaterial
-var _pts := PackedVector2Array()
+var _pts := PackedVector2Array()     # cloth particles, row-major, screen px
 var _prev := PackedVector2Array()
-var _seg := 10.0
+var _rest := PackedVector2Array()    # hanging shape in the head's frame (x = right, y = back), px
+var _links := PackedInt32Array()     # constraint pairs
+var _link_len := PackedFloat32Array()
+var _link_bend := PackedByteArray()  # 1 = bend spring (skips a particle)
 var _sim_acc := 0.0
 var _sim_t := 0.0
 var _rand := {}             # per-ghost 0..1 picks, so live setting changes keep each ghost's character
@@ -82,12 +88,11 @@ func setup(rng: RandomNumberGenerator, screen: Vector2) -> void:
 	_life_left = S.rand(rng, "life")
 	_blink_in = rng.randf_range(1.0, S.f("blink_max"))
 
-	# Start with the body hanging straight behind the head.
-	_pts.resize(N)
-	_prev.resize(N)
-	var back := -Vector2.from_angle(heading)
-	for i in N:
-		_pts[i] = position + back * _seg * i
+	# Start with the cloth hanging straight behind the head.
+	_pts.resize(ROWS * COLS)
+	_prev.resize(ROWS * COLS)
+	for i in ROWS * COLS:
+		_pts[i] = _rest_world(i)
 		_prev[i] = _pts[i]
 	_push_spine()
 
@@ -95,7 +100,6 @@ func setup(rng: RandomNumberGenerator, screen: Vector2) -> void:
 ## Re-read settings (called on spawn and when the settings file is reloaded).
 func apply_settings() -> void:
 	length_px = area.size.y * lerpf(S.f("size_min"), S.f("size_max"), _depth)
-	_seg = length_px * S.f("body_length") / float(N - 1)
 	# Quad big enough for the longest the body can stretch, plus the halo.
 	var quad := 2.0 * (S.f("body_length") * (1.0 + S.f("stretch")) + 0.35)
 	scale = Vector2.ONE * quad * length_px / 4.0
@@ -103,7 +107,7 @@ func apply_settings() -> void:
 	var pick := func(key: String) -> float:
 		return lerpf(S.f(key + "_min"), S.f(key + "_max"), _rand[key])
 	_mat.set_shader_parameter("body_width", pick.call("body_width"))
-	_mat.set_shader_parameter("flare", pick.call("flare"))
+	_build_cloth(pick.call("body_width"), pick.call("flare"))
 	_mat.set_shader_parameter("scallops", float(round(pick.call("scallops"))))
 	_mat.set_shader_parameter("cloth_speed", pick.call("cloth_speed"))
 	_mat.set_shader_parameter("cloth_amount", S.f("cloth_amount"))
@@ -167,52 +171,111 @@ func _simulate_cloth(delta: float) -> void:
 		_cloth_step(SIM_DT)
 
 
-## The body is a joint chain hanging off the head. Each joint is dragged by
-## the one in front of it (follow-the-leader), keeps some momentum so it swings
-## and overshoots, and can only bend so far, like vertebrae. A slow wave and
-## turbulence push sideways along the whole length, not just the tip.
-func _cloth_step(h: float) -> void:
-	_pts[0] = position
-	var damp := pow(clampf(S.f("keep_velocity"), 0.0, 0.99), h)
-	var fl := S.f("flutter") * length_px * h * h * 60.0
-	var wave_amount := S.f("wave_amount") * length_px * h * h
-	var wave_speed := S.f("wave_speed")
-	for i in range(1, N):
-		var k := float(i) / float(N - 1)
-		var v := (_pts[i] - _prev[i]) * damp
-		_prev[i] = _pts[i]
-		var air := Vector2(_noise.get_noise_2d(i * 13.0, _sim_t * 6.0), _noise.get_noise_2d(i * 13.0 + 300.0, _sim_t * 6.0))
-		var side := (_pts[i - 1] - _pts[i]).normalized().orthogonal()
-		var wave := sin(_sim_t * wave_speed - k * 3.0 + _phase) * sqrt(k)
-		_pts[i] += v + air * fl * sqrt(k) + side * wave * wave_amount
+## Rest shape of the cloth and its springs. The cloth hangs from the widest
+## line across the head and widens towards the hem (flare).
+func _build_cloth(width: float, flare: float) -> void:
+	_rest.resize(ROWS * COLS)
+	var row_gap := length_px * S.f("body_length") / float(ROWS - 1)
+	var head_r := 0.13 * width * length_px
+	for r in ROWS:
+		var k := float(r) / float(ROWS - 1)
+		var half := head_r * (1.0 + flare * k)
+		for c in COLS:
+			_rest[r * COLS + c] = Vector2((float(c) / float(COLS - 1) * 2.0 - 1.0) * half, r * row_gap)
+	_links.clear()
+	_link_len.clear()
+	_link_bend.clear()
+	var add := func(a: int, b: int, bend: int) -> void:
+		_links.append(a)
+		_links.append(b)
+		_link_len.append(_rest[a].distance_to(_rest[b]))
+		_link_bend.append(bend)
+	for r in ROWS:
+		for c in COLS:
+			var i := r * COLS + c
+			if c + 1 < COLS: add.call(i, i + 1, 0)
+			if r + 1 < ROWS: add.call(i, i + COLS, 0)
+			if r + 1 < ROWS and c + 1 < COLS:
+				add.call(i, i + COLS + 1, 0)
+				add.call(i + 1, i + COLS, 0)
+			if c + 2 < COLS: add.call(i, i + 2, 1)
+			if r + 2 < ROWS: add.call(i, i + 2 * COLS, 1)
 
-	var straighten := S.f("stiffness")
-	var max_bend := deg_to_rad(S.f("max_bend"))
-	var stretch := S.f("stretch")
-	var prev_dir := -Vector2.from_angle(heading)   # first joint may swing freely around the head
-	for i in range(1, N):
-		var d := _pts[i] - _pts[i - 1]
-		var l := d.length()
-		if l < 0.0001:
-			d = prev_dir * _seg
-			l = _seg
-		var dir := d / l
-		if i >= 2:
-			# Joint limit, plus a gentle pull towards straight.
-			var ang := prev_dir.angle_to(dir)
-			ang = clampf(ang * (1.0 - straighten), -max_bend, max_bend)
-			dir = prev_dir.rotated(ang)
-		var target := clampf(lerpf(l, _seg, 0.5), _seg * 0.95, _seg * (1.0 + stretch))
-		_pts[i] = _pts[i - 1] + dir * target
-		prev_dir = dir
+
+func _rest_world(i: int) -> Vector2:
+	var fwd := Vector2.from_angle(head_angle)
+	var rp := _rest[i]
+	return position + fwd.orthogonal() * -rp.x - fwd * rp.y
+
+
+func _cloth_step(h: float) -> void:
+	var count := ROWS * COLS
+	var keep := exp(-S.f("water_drag") * h)
+	var memory := S.f("shape_memory")
+	var grav := Vector2(0.0, S.f("gravity") * length_px)
+	var turb := S.f("flutter") * length_px
+	var wave_amount := S.f("wave_amount") * length_px
+	var wave_speed := S.f("wave_speed")
+	var inv_len := 30.0 / length_px
+	for i in range(PINNED_ROWS * COLS, count):
+		var r := i / COLS
+		var k := float(r) / float(ROWS - 1)
+		var p := _pts[i]
+		var v := (p - _prev[i]) * keep
+		_prev[i] = p
+		var acc := grav + (_rest_world(i) - p) * memory
+		# Slow currents: a noise field the cloth drifts through.
+		acc += Vector2(_noise.get_noise_2d(p.x * inv_len + _sim_t * 6.0, p.y * inv_len),
+				_noise.get_noise_2d(p.x * inv_len + 300.0, p.y * inv_len - _sim_t * 6.0)) * turb * k
+		# Travelling wave, pushing sideways to the cloth.
+		var up := (_pts[i - COLS] - p).normalized()
+		acc += up.orthogonal() * sin(_sim_t * wave_speed - k * 3.0 + _phase) * sqrt(k) * wave_amount
+		_pts[i] = p + v + acc * h * h
+	for i in PINNED_ROWS * COLS:
+		_pts[i] = _rest_world(i)
+		_prev[i] = _pts[i]
+
+	# Springs (position-based): stretch / shear springs may stretch a little
+	# and squash freely like folding fabric; bend springs keep it from crumpling.
+	var stiff := clampf(S.f("cloth_stiffness"), 0.0, 1.0)
+	var bend := clampf(S.f("cloth_bend"), 0.0, 1.0)
+	var stretch := 1.0 + S.f("stretch")
+	var squash := 1.0 - S.f("squash")
+	var pinned := PINNED_ROWS * COLS
+	for _it in S.i("cloth_iterations"):
+		for j in _link_len.size():
+			var a := _links[2 * j]
+			var b := _links[2 * j + 1]
+			var wa := 0.0 if a < pinned else 1.0
+			var wb := 0.0 if b < pinned else 1.0
+			if wa + wb == 0.0:
+				continue
+			var d := _pts[b] - _pts[a]
+			var l := d.length()
+			if l < 0.0001:
+				continue
+			var rest := _link_len[j]
+			var target: float
+			var strength: float
+			if _link_bend[j] == 1:
+				target = rest
+				strength = bend
+			else:
+				target = clampf(l, rest * squash, rest * stretch)
+				strength = stiff
+			if target == l:
+				continue
+			var corr := d * ((l - target) / l * strength / (wa + wb))
+			_pts[a] += corr * wa
+			_pts[b] -= corr * wb
 
 
 func _push_spine() -> void:
 	var local := PackedVector2Array()
-	local.resize(N)
-	for i in N:
-		local[i] = (_pts[i] - _pts[0]) / length_px
-	_mat.set_shader_parameter("spine", local)
+	local.resize(ROWS * COLS)
+	for i in ROWS * COLS:
+		local[i] = (_pts[i] - position) / length_px
+	_mat.set_shader_parameter("cloth", local)
 	_mat.set_shader_parameter("head_angle", head_angle)
 
 

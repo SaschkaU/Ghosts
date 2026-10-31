@@ -37,9 +37,9 @@ export templates the first time.
 
 | File | What it does |
 | --- | --- |
-| `shaders/ghost.gdshader` | Draws one ghost: chalk body, pink rim, eyes, blush, scalloped hem. The cloth motion lives here. |
+| `shaders/ghost.gdshader` | Draws one ghost: the outline of the simulated cloth as a chalk body, pink rim, eyes, blush, scalloped hem. |
 | `shaders/spooky_screen.gdshader` | Full-screen filter: bloom, film grain, chromatic fringe, projector flicker, vignette. Darks are clamped to true black so the projector shows nothing between ghosts. |
-| `scripts/ghost.gd` | Only the head is driven: it wanders with surges and pauses and turns and glances on its own. The body is a loose chain simulated like cloth (inertia, slight stretch, light bending stiffness, air flutter) that is dragged along behind. Each ghost materializes, lives 15–55 s, then dissolves. |
+| `scripts/ghost.gd` | Only the head is driven: it wanders with surges and pauses and turns and glances on its own. The body is a real cloth simulation: a 10×5 mass-spring grid (verlet particles with stretch, shear and bend springs) pinned to the head, pushed around by water drag, slow currents and a travelling wave. Each ghost materializes, lives a while, then dissolves. |
 | `scripts/main.gd` | Keeps up to 5 ghosts around, staggered: they appear one by one at the start, and a new one appears 3–12 s after one dissolves, keeps them apart, handles keys and screens. |
 | `scripts/sparkles.gd` | Twinkling gold chalk crosses. |
 

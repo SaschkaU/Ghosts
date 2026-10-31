@@ -1,13 +1,16 @@
 // One ghost, drawn procedurally.
-// The body is a tapered tube around a chain of points (spine[]) that
-// scripts/ghost.gd simulates like a piece of cloth: the head leads, the body
-// trails behind it with follow-through. On top of that the shader adds slow
-// ripples, a fluttering scalloped hem, and a dissolve for appearing/vanishing.
+// The body is a real piece of simulated cloth: scripts/ghost.gd runs a
+// mass-spring grid (ROWS x COLS particles) hanging off the head, and this
+// shader draws the outline of that grid (left edge, hem, right edge) as a
+// smooth shape, with a scalloped hem, a dissolve for appearing/vanishing,
+// and the face on the head.
 // Look: chalky cream body, pink chalk rim, black oval eyes, scribbled blush.
 shader_type canvas_item;
 
-const int N = 10;
-uniform vec2 spine[10];                // chain points in ghost-length units, spine[0] = head centre = quad centre
+const int ROWS = 10;
+const int COLS = 5;
+const int NB = 2 * ROWS + COLS - 2;   // outline points
+uniform vec2 cloth[50];                // grid points (row-major) in ghost-length units, relative to the head centre = quad centre
 uniform float quad_size = 2.4;         // quad side in ghost-length units
 uniform float head_angle = -1.5708;    // direction the head is facing (screen space, radians)
 uniform float phase = 0.0;             // per-ghost time offset
@@ -15,7 +18,6 @@ uniform float look = 0.0;              // -1..1, face glance left/right
 uniform float blink = 0.0;             // 0 open, 1 closed
 uniform float presence = 1.0;          // 0 = gone, 1 = fully here (dissolve)
 uniform float body_width = 1.0;
-uniform float flare = 0.35;            // how much the cloth widens towards the hem
 uniform float cloth_amount = 1.0;      // strength of the extra cloth ripples
 uniform float cloth_speed = 0.3;       // < 1 = slow motion (underwater feel)
 uniform float scallops = 3.0;          // number of lobes on the hem
@@ -77,43 +79,64 @@ void fragment() {
 	vec2 q = p + cloth_amount * far * far * 0.13 *
 			(vec2(fbm(p * 1.6 + vec2(-t * 0.45, t * 0.2)), fbm(p * 1.6 + vec2(5.2, -t * 0.4))) - 0.5);
 
-	// Tapered tube around the spine chain.
-	float d_tube = 1e5;
+	// Outline of the cloth grid as a polygon (signed distance, negative inside).
+	float d2 = 1e5;
+	float sgn = 1.0;
+	vec2 vj = cloth[(ROWS - 1) * COLS + COLS - 2];   // last outline point (hem, next to the right corner)
+	for (int k = 0; k < NB; k++) {
+		int idx;
+		if (k < ROWS) idx = (ROWS - 1 - k) * COLS + COLS - 1;               // right edge, hem up to head
+		else if (k < 2 * ROWS) idx = (k - ROWS) * COLS;                      // left edge, head down to hem
+		else idx = (ROWS - 1) * COLS + (k - 2 * ROWS + 1);                   // hem, left to right
+		vec2 vi = cloth[idx];
+		vec2 e = vj - vi;
+		vec2 w = q - vi;
+		vec2 b = w - e * clamp(dot(w, e) / max(dot(e, e), 1e-8), 0.0, 1.0);
+		d2 = min(d2, dot(b, b));
+		bvec3 c = bvec3(q.y >= vi.y, q.y < vj.y, e.x * w.y > e.y * w.x);
+		if (all(c) || all(not(c))) sgn = -sgn;
+		vj = vi;
+	}
+	float d_poly = sgn * sqrt(d2) - 0.006;
+
+	// Where along / across the body this pixel is, from the middle column.
+	float d_mid = 1e5;
 	float s_body = 0.0;      // 0 at head centre, 1 at the hem
 	float x_body = 0.0;      // -1..1 across the body
-	for (int i = 0; i < N - 1; i++) {
-		vec2 a = spine[i];
-		vec2 ab = spine[i + 1] - a;
-		float h = clamp(dot(q - a, ab) / max(dot(ab, ab), 1e-6), 0.0, 1.0);
+	int mc = COLS / 2;
+	for (int r = 0; r < ROWS - 1; r++) {
+		vec2 a = cloth[r * COLS + mc];
+		vec2 ab = cloth[(r + 1) * COLS + mc] - a;
+		float h = clamp(dot(q - a, ab) / max(dot(ab, ab), 1e-8), 0.0, 1.0);
 		vec2 c = a + ab * h;
-		float s = (float(i) + h) / float(N - 1);
-		float hw = R * (1.0 + flare * s + 0.14 * sin(s * 4.0 - t * 0.8) * s * cloth_amount);
-		float di = length(q - c) - hw;
-		if (di < d_tube) {
-			d_tube = di;
-			s_body = s;
+		float dm = length(q - c);
+		if (dm < d_mid) {
+			d_mid = dm;
+			s_body = (float(r) + h) / float(ROWS - 1);
+			float hw0 = 0.5 * length(cloth[r * COLS + COLS - 1] - cloth[r * COLS]);
+			float hw1 = 0.5 * length(cloth[(r + 1) * COLS + COLS - 1] - cloth[(r + 1) * COLS]);
 			vec2 tn = normalize(ab + vec2(1e-6));
-			x_body = dot(q - c, vec2(-tn.y, tn.x)) / hw;
+			x_body = dot(q - c, vec2(-tn.y, tn.x)) / max(mix(hw0, hw1, h), 1e-3);
 		}
 	}
 
-	// Square off the tail end and give it a scalloped, fluttering hem.
-	vec2 tail_end = spine[N - 1];
-	vec2 te = normalize(tail_end - spine[N - 3] + vec2(1e-6));   // smoothed tail direction
-	vec2 tp = vec2(-te.y, te.x);
-	float hw_end = R * (1.0 + flare);
-	float along = dot(q - tail_end, te);
-	float xl = dot(q - tail_end, tp) / hw_end;
-	float d_ext = max(abs(dot(q - tail_end, tp)) - hw_end, -along);
-	float lobe_x = scallops * 1.5708 * (xl + 1.0) + 0.45 * sin(t * 0.7 + xl * 2.0) * cloth_amount;
+	// Scalloped hem: lobes along the bottom row, notches between them.
+	float d_hem = 1e5;
+	float u_hem = 0.0;
+	for (int c = 0; c < COLS - 1; c++) {
+		vec2 a = cloth[(ROWS - 1) * COLS + c];
+		vec2 ab = cloth[(ROWS - 1) * COLS + c + 1] - a;
+		float h = clamp(dot(q - a, ab) / max(dot(ab, ab), 1e-8), 0.0, 1.0);
+		float dh = length(q - a - ab * h);
+		if (dh < d_hem) { d_hem = dh; u_hem = (float(c) + h) / float(COLS - 1); }
+	}
+	float lobe_x = scallops * 3.14159 * u_hem + 0.45 * sin(t * 0.7 + u_hem * 4.0) * cloth_amount;
 	float lobe = pow(abs(sin(lobe_x)), 0.45);
-	float hem = 0.035 - 0.04 * (1.0 - lobe)
-			  + cloth_amount * (0.03 * sin(t * 1.2 + xl * 3.0) + 0.02 * sin(t * 0.7 - xl * 2.0));
-	// Only cut the hem near the tail end, so a body curling back on itself
-	// doesn't get sliced by the hem line.
-	float near_end = step(length(q - tail_end), hw_end * 1.8);
-	float d_body = mix(d_tube, max(min(d_tube, d_ext), along - hem), near_end);
-	if (near_end > 0.5 && along > 0.0 && d_ext < d_tube) { s_body = 1.0; x_body = xl; }
+	float hem = 0.03 - 0.045 * (1.0 - lobe) + cloth_amount * 0.015 * sin(t * 1.2 + u_hem * 6.0);
+	float hem_w = (1.0 - smoothstep(0.03, 0.09, d_hem)) * smoothstep(0.75, 0.95, s_body);
+	float d_body = d_poly - hem * hem_w;
+	s_body = clamp(s_body, 0.0, 1.0);
+	x_body = clamp(x_body, -1.5, 1.5);
 
 	float d_head = length(q) - R;
 	float d = smin(d_head, d_body, 0.04);
