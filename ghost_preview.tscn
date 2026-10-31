@@ -1,0 +1,23 @@
+[gd_scene load_steps=5 format=3]
+
+[ext_resource type="Shader" path="res://shaders/ghost.gdshader" id="1"]
+
+[sub_resource type="ShaderMaterial" id="mat"]
+shader = ExtResource("1")
+shader_parameter/aspect = 0.8
+shader_parameter/bend = 0.3
+
+[sub_resource type="Gradient" id="grad"]
+colors = PackedColorArray(1, 1, 1, 1, 1, 1, 1, 1)
+
+[sub_resource type="GradientTexture2D" id="tex"]
+gradient = SubResource("grad")
+width = 640
+height = 800
+
+[node name="GhostPreview" type="Node2D"]
+
+[node name="Ghost" type="Sprite2D" parent="."]
+material = SubResource("mat")
+position = Vector2(960, 540)
+texture = SubResource("tex")
