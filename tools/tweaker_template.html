@@ -168,6 +168,7 @@ const GROUPS = [
   ["Glow & transparency", false, [
     ["opacity_far", "Opacity, far ghosts", 0, 1, 0.01], ["opacity_near", "Opacity, near ghosts", 0, 1, 0.01],
     ["tail_fade", "Hem fades out", 0, 1, 0.01],
+    ["outline", "Pink outline", 0, 1, 0.01, "0 = no outline."],
     ["glow", "Halo", 0, 2, 0.01],
     ["ghost_flicker", "Ghost flicker", 0, 0.6, 0.01],
   ]],
@@ -289,7 +290,7 @@ function drawSparkles(dt) {
 }
 
 // ---------- Ghosts (scripts/ghost.gd) ----------
-const N = 10, QUAD = 2.4;
+const N = 10;
 let ghosts = [], pending = [], simTime = 0;
 class Ghost {
   constructor() {
@@ -361,18 +362,18 @@ class Ghost {
   }
   draw() {
     const pr = ghostProg, u = n => pr.u(n);
-    gl.uniform2f(u("u_center"), this.x, this.y); gl.uniform2f(u("u_size"), QUAD * this.len, QUAD * this.len);
+    gl.uniform2f(u("u_center"), this.x, this.y); const quad = 2 * (f("body_length") * (1 + f("stretch")) + .35); gl.uniform2f(u("u_size"), quad * this.len, quad * this.len);
     const sp = new Float32Array(N * 2); for (let i = 0; i < N; i++) { sp[i * 2] = (this.pts[i][0] - this.x) / this.len; sp[i * 2 + 1] = (this.pts[i][1] - this.y) / this.len; }
     gl.uniform2fv(u("spine"), sp);
     const set = (n, v) => gl.uniform1f(u(n), v);
-    set("quad_size", QUAD); set("head_angle", this.headAngle); set("phase", this.phase);
+    set("quad_size", quad); set("head_angle", this.headAngle); set("phase", this.phase);
     set("look", Math.sin(this.t * .23 + this.phase) * f("look_amount"));
     set("blink", this.blinkT < 0 ? 0 : Math.sin(Math.PI * this.blinkT / Math.max(f("blink_duration"), .05)));
     const p = this.presence; set("presence", p * p * (3 - 2 * p));
     set("body_width", this.pick("body_width")); set("flare", this.pick("flare")); set("scallops", Math.round(this.pick("scallops")));
     set("cloth_speed", this.pick("cloth_speed")); set("cloth_amount", f("cloth_amount"));
     set("opacity", lerp(f("opacity_far"), f("opacity_near"), this.depth)); set("tail_fade", f("tail_fade")); set("glow", f("glow"));
-    set("flicker", f("ghost_flicker")); set("eye_size", f("eye_size")); set("blush_amount", f("blush"));
+    set("flicker", f("ghost_flicker")); set("eye_size", f("eye_size")); set("blush_amount", f("blush")); set("outline", f("outline"));
     for (const c of ["body_color", "rim_color", "blush_color", "eye_color", "glow_color"]) gl.uniform4f(u(c), ...hex(S[c]), 1);
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
   }

@@ -15,45 +15,46 @@ const DEFAULTS := {
 	"fade_out_min": 3.0, "fade_out_max": 8.0,
 	"respawn_min": 3.0, "respawn_max": 12.0,
 	# Size & head movement
-	"size_min": 0.24, "size_max": 0.45,          # ghost length, fraction of screen height
-	"speed_min": 30.0, "speed_max": 70.0,        # px/s at 1080p (small ghosts are slower)
-	"speed_low": 0.2, "speed_high": 1.4,         # surges: slowest / fastest multiplier
-	"surge_rate": 6.0,                           # how quickly the speed changes
-	"turn_amount": 1.2,                          # how much the path wanders
-	"turn_rate": 10.0,                           # how quickly the wandering changes
-	"head_lead": 0.6,                            # head looks into turns
+	"size_min": 0.52, "size_max": 0.43,          # ghost length, fraction of screen height
+	"speed_min": 10.0, "speed_max": 131.0,        # px/s at 1080p (small ghosts are slower)
+	"speed_low": 1.6, "speed_high": 1.95,         # surges: slowest / fastest multiplier
+	"surge_rate": 30.0,                           # how quickly the speed changes
+	"turn_amount": 3.9,                          # how much the path wanders
+	"turn_rate": 19.0,                           # how quickly the wandering changes
+	"head_lead": 1.75,                            # head looks into turns
 	"glance": 0.7,                               # head looks around on its own
 	"head_turn_speed": 2.0,
 	"bob": 8.0,                                  # sideways floating wobble, px
 	"personal_space": 0.4,                       # how far ghosts keep apart
 	# Cloth simulation (the body)
-	"body_length": 0.72,                         # head centre to hem, in ghost lengths
+	"body_length": 0.83,                         # head centre to hem, in ghost lengths
 	"stiffness": 0.02,                           # pull towards straight per step (0 = limp)
 	"max_bend": 28.0,                            # max bend per joint, degrees
-	"stretch": 0.3,
-	"keep_velocity": 0.6,
-	"flutter": 0.4,
-	"wave_amount": 0.9,
-	"wave_speed": 0.6,
+	"stretch": 0.56,
+	"keep_velocity": 0.0,
+	"flutter": 0.3,
+	"wave_amount": 1.15,
+	"wave_speed": 0.25,
 	# Shape (randomized per ghost between min and max)
 	"body_width_min": 0.8, "body_width_max": 1.15,
 	"flare_min": 0.15, "flare_max": 0.5,
 	"scallops_min": 2, "scallops_max": 4,
 	# Shader cloth detail
-	"cloth_amount": 1.0,
-	"cloth_speed_min": 0.22, "cloth_speed_max": 0.35,
+	"cloth_amount": 0.75,
+	"cloth_speed_min": 0.22, "cloth_speed_max": 0.53,
 	# Look
-	"opacity_far": 0.65, "opacity_near": 0.95,
+	"opacity_far": 0.77, "opacity_near": 0.95,
 	"tail_fade": 0.45,
-	"glow": 0.55,
-	"ghost_flicker": 0.08,
+	"glow": 1.45,
+	"ghost_flicker": 0.38,
 	# Face
 	"blink_min": 3.0, "blink_max": 9.0,          # seconds between blinks
 	"blink_duration": 0.3,
 	"double_blink": 0.3,                         # chance of a quick second blink
 	"look_amount": 0.8,                          # eyes glance left/right
-	"eye_size": 1.0,
-	"blush": 0.9,
+	"eye_size": 1.55,
+	"blush": 1.0,
+	"outline": 0.0,                              # pink chalk outline strength (0 = none)
 	# Colours
 	"body_color": "#f5edd9",
 	"rim_color": "#d1618c",
@@ -62,18 +63,18 @@ const DEFAULTS := {
 	"glow_color": "#ccc7f2",
 	"sparkle_color": "#d9a840",
 	# Sparkles
-	"sparkle_count": 26,
+	"sparkle_count": 0,
 	"sparkle_size": 1.0,
-	"sparkle_speed": 1.0,
+	"sparkle_speed": 3.65,
 	# Screen filter
 	"filter_on": true,
-	"bloom": 0.7,
-	"bloom_radius": 14.0,
-	"grain": 0.1,
-	"aberration": 2.0,
-	"screen_flicker": 0.05,
-	"vignette": 0.55,
-	"black_floor": 0.012,
+	"bloom": 1.75,
+	"bloom_radius": 33.0,
+	"grain": 0.18,
+	"aberration": 6.2,
+	"screen_flicker": 0.21,
+	"vignette": 0.0,
+	"black_floor": 0.0,
 }
 
 static var data := DEFAULTS.duplicate()

@@ -25,6 +25,7 @@ uniform float glow = 0.55;             // soft halo around the body
 uniform float flicker = 0.08;
 uniform float eye_size = 1.0;
 uniform float blush_amount = 0.9;
+uniform float outline = 1.0;           // pink chalk outline strength (0 = none)
 
 uniform vec4 body_color : source_color = vec4(0.96, 0.93, 0.85, 1.0);
 uniform vec4 rim_color : source_color = vec4(0.82, 0.38, 0.55, 1.0);
@@ -131,10 +132,10 @@ void fragment() {
 	vec3 col = body_color.rgb * (chalk - speck);
 
 	// Soft pink shading inside the edge, then the chalk rim itself.
-	col = mix(col, rim_color.rgb, smoothstep(-0.05, -0.012, d) * 0.18);
+	col = mix(col, rim_color.rgb, smoothstep(-0.05, -0.012, d) * 0.18 * outline);
 	float rim_w = 0.010 + 0.004 * vnoise(p * 30.0);
 	float rim = smoothstep(-rim_w - aa, -rim_w + aa, d);
-	col = mix(col, rim_color.rgb * (0.85 + 0.25 * vnoise(p * 200.0)), rim);
+	col = mix(col, rim_color.rgb * (0.85 + 0.25 * vnoise(p * 200.0)), rim * outline);
 
 	// Face, in the head's own frame (x = right, y = towards the back).
 	vec2 fwd = vec2(cos(head_angle), sin(head_angle));

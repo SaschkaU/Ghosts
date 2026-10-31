@@ -18,7 +18,6 @@ signal gone
 const S := preload("res://scripts/settings.gd")
 const GHOST_SHADER := preload("res://shaders/ghost.gdshader")
 const N := 10                 # must match N in the shader
-const QUAD := 2.4             # quad side in ghost lengths
 const SIM_DT := 1.0 / 60.0
 
 static var _white_tex: Texture2D
@@ -71,7 +70,6 @@ func setup(rng: RandomNumberGenerator, screen: Vector2) -> void:
 	texture = _white_tex
 	_mat = ShaderMaterial.new()
 	_mat.shader = GHOST_SHADER
-	_mat.set_shader_parameter("quad_size", QUAD)
 	_mat.set_shader_parameter("phase", _phase)
 	material = _mat
 	apply_settings()
@@ -98,7 +96,10 @@ func setup(rng: RandomNumberGenerator, screen: Vector2) -> void:
 func apply_settings() -> void:
 	length_px = area.size.y * lerpf(S.f("size_min"), S.f("size_max"), _depth)
 	_seg = length_px * S.f("body_length") / float(N - 1)
-	scale = Vector2.ONE * QUAD * length_px / 4.0
+	# Quad big enough for the longest the body can stretch, plus the halo.
+	var quad := 2.0 * (S.f("body_length") * (1.0 + S.f("stretch")) + 0.35)
+	scale = Vector2.ONE * quad * length_px / 4.0
+	_mat.set_shader_parameter("quad_size", quad)
 	var pick := func(key: String) -> float:
 		return lerpf(S.f(key + "_min"), S.f(key + "_max"), _rand[key])
 	_mat.set_shader_parameter("body_width", pick.call("body_width"))
@@ -112,6 +113,7 @@ func apply_settings() -> void:
 	_mat.set_shader_parameter("flicker", S.f("ghost_flicker"))
 	_mat.set_shader_parameter("eye_size", S.f("eye_size"))
 	_mat.set_shader_parameter("blush_amount", S.f("blush"))
+	_mat.set_shader_parameter("outline", S.f("outline"))
 	for k in ["body_color", "rim_color", "blush_color", "eye_color", "glow_color"]:
 		_mat.set_shader_parameter(k, S.c(k))
 
