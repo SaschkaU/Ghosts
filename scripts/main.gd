@@ -1,7 +1,7 @@
 extends Node2D
 ## Projector ghosts. Pitch black background, wandering ghosts, spooky filter.
 ##
-## Keys:  F fullscreen · S next screen · Up/Down more/fewer ghosts
+## Keys:  F or double-click fullscreen · S next screen · Up/Down more/fewer ghosts
 ##        P filter on/off · R reload ghost_settings.json · H help · Esc quit
 ## Command line (after `--`):  --screen=1  --ghosts=12
 
@@ -23,7 +23,6 @@ var _count_override := -1
 func _ready() -> void:
 	_rng.randomize()
 	S.load_file()
-	Input.mouse_mode = Input.MOUSE_MODE_HIDDEN
 	_parse_args()
 	ghost_count = _count_override if _count_override >= 0 else S.i("ghost_count")
 
@@ -48,21 +47,20 @@ func _ready() -> void:
 	ui.layer = 20
 	add_child(ui)
 	_help = Label.new()
-	_help.text = "F fullscreen   S next screen   Up/Down ghosts   P filter   R reload settings   H help   Esc quit"
+	_help.text = "F / double-click fullscreen   S next screen   Up/Down ghosts   P filter   R reload settings   H help   Esc quit"
 	_help.position = Vector2(24, 20)
 	_help.modulate = Color(1, 1, 1, 0.5)
 	ui.add_child(_help)
 	get_tree().create_timer(5.0).timeout.connect(func(): _help.visible = false)
 
 	get_viewport().size_changed.connect(_reset)
+	get_viewport().size_changed.connect(_update_cursor)
 	# Defer so the window has its final size (fullscreen / screen switch).
 	_reset.call_deferred()
 
 
 func _parse_args() -> void:
-	var screen := -1
-	if DisplayServer.get_screen_count() > 1:
-		screen = DisplayServer.get_screen_count() - 1   # projector is usually the last screen
+	var screen := -1   # starts in a normal window on the main screen; --screen=N moves it
 	for arg in OS.get_cmdline_user_args() + OS.get_cmdline_args():
 		if arg.begins_with("--screen="):
 			screen = int(arg.get_slice("=", 1))
@@ -163,15 +161,40 @@ func _process(_delta: float) -> void:
 				b.avoid += push
 
 
+func _is_fullscreen() -> bool:
+	var m := get_window().mode
+	return m == Window.MODE_FULLSCREEN or m == Window.MODE_EXCLUSIVE_FULLSCREEN
+
+
+## Fullscreen covers the whole screen with nothing else on it: no title bar,
+## window buttons, menu bar, Dock or mouse cursor. Back in a window, the
+## cursor shows again.
+func _toggle_fullscreen() -> void:
+	var win := get_window()
+	if _is_fullscreen():
+		win.mode = Window.MODE_WINDOWED
+	else:
+		win.mode = Window.MODE_EXCLUSIVE_FULLSCREEN
+	_help.visible = false
+	_update_cursor()
+
+
+## Also catches the macOS green button, which goes fullscreen without the F key.
+func _update_cursor() -> void:
+	Input.mouse_mode = Input.MOUSE_MODE_HIDDEN if _is_fullscreen() else Input.MOUSE_MODE_VISIBLE
+
+
 func _unhandled_input(event: InputEvent) -> void:
+	if event is InputEventMouseButton and event.double_click:
+		_toggle_fullscreen()
+		return
 	if not (event is InputEventKey and event.pressed and not event.echo):
 		return
 	match event.keycode:
 		KEY_ESCAPE, KEY_Q:
 			get_tree().quit()
 		KEY_F:
-			var win := get_window()
-			win.mode = Window.MODE_WINDOWED if win.mode == Window.MODE_FULLSCREEN else Window.MODE_FULLSCREEN
+			_toggle_fullscreen()
 		KEY_S:
 			_move_to_screen(get_window().current_screen + 1)
 		KEY_UP:
