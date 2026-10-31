@@ -1,8 +1,9 @@
 # Ghosts
 
 A Godot 4 app for a projector: pitch-black fullscreen with chalky, softly glowing
-ghosts drifting around. Everything is drawn by shaders, so there are no sprite
-images to manage, and the lower half of each ghost moves like slow-motion cloth.
+ghosts that materialize, drift around and dissolve again. The head leads and the
+body follows like slow-motion cloth. Everything is drawn by shaders, so there are
+no sprite images to manage.
 
 ![screenshot](docs/screenshot.jpg)
 
@@ -37,21 +38,16 @@ export templates the first time.
 | --- | --- |
 | `shaders/ghost.gdshader` | Draws one ghost: chalk body, pink rim, eyes, blush, scalloped hem. The cloth motion lives here. |
 | `shaders/spooky_screen.gdshader` | Full-screen filter: bloom, film grain, chromatic fringe, projector flicker, vignette. Darks are clamped to true black so the projector shows nothing between ghosts. |
-| `scripts/ghost.gd` | Slow noise-driven wandering. The head leads, the tail bends against turns, and the ghost blinks and glances around. |
-| `scripts/main.gd` | Spawns ghosts, keeps them apart, handles keys and screens. |
+| `scripts/ghost.gd` | Slow noise-driven wandering. The head leads and turns into curves; the body is a chain simulated like cloth (inertia, bending stiffness, air flutter) so it trails with follow-through. Each ghost materializes, lives 18–40 s, then dissolves. |
+| `scripts/main.gd` | Keeps 5 ghosts around (a new one appears a few seconds after one dissolves), keeps them apart, handles keys and screens. |
 | `scripts/sparkles.gd` | Twinkling gold chalk crosses. |
-| `ghost_preview.tscn` | One big ghost, for tuning the shader live in the editor. |
 
 ### Tuning the look
 
-Open `ghost_preview.tscn`, select **Ghost**, and play with the shader parameters
-in the Inspector. The useful ones are `cloth_amount`, `cloth_speed`, `flare`,
-`scallops`, `tail_fade`, `glow`, and the colours. To change every ghost, edit the
-default values at the top of `shaders/ghost.gdshader` or the random ranges in
-`scripts/ghost.gd`.
+The cloth feel is set at the top of `scripts/ghost.gd`: `stiffness`,
+`neck_stiffness`, `keep_velocity` (more = more swing and follow-through) and
+`flutter`.
 
-### Using painted ghost images instead
-
-Put PNGs (one upright ghost per image, head at the top, transparent background)
-in a `ghost_images/` folder. About half the ghosts will use them, with the same
-cloth motion and spooky filter applied.
+The look is set by the defaults at the top of `shaders/ghost.gdshader`
+(`cloth_amount`, `cloth_speed`, `flare`, `scallops`, `tail_fade`, `glow`, colours)
+and the random ranges in `setup()` in `scripts/ghost.gd`.

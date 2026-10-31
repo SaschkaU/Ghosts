@@ -8,7 +8,6 @@ extends Node2D
 const Ghost := preload("res://scripts/ghost.gd")
 const Sparkles := preload("res://scripts/sparkles.gd")
 const SCREEN_SHADER := preload("res://shaders/spooky_screen.gdshader")
-const IMAGE_DIR := "res://ghost_images"
 
 @export var ghost_count := 5
 
@@ -17,14 +16,12 @@ var _ghost_layer: Node2D
 var _sparkles: Node2D
 var _filter: ColorRect
 var _help: Label
-var _images: Array[Texture2D] = []
 
 
 func _ready() -> void:
 	_rng.randomize()
 	Input.mouse_mode = Input.MOUSE_MODE_HIDDEN
 	_parse_args()
-	_load_images()
 
 	_sparkles = Sparkles.new()
 	add_child(_sparkles)
@@ -70,17 +67,6 @@ func _parse_args() -> void:
 		_move_to_screen(screen)
 
 
-func _load_images() -> void:
-	if not DirAccess.dir_exists_absolute(IMAGE_DIR):
-		return
-	for f in DirAccess.get_files_at(IMAGE_DIR):
-		f = f.trim_suffix(".import").trim_suffix(".remap")
-		if f.get_extension().to_lower() in ["png", "webp", "jpg", "jpeg"]:
-			var tex := load(IMAGE_DIR.path_join(f)) as Texture2D
-			if tex and not _images.has(tex):
-				_images.append(tex)
-
-
 func _move_to_screen(idx: int) -> void:
 	var win := get_window()
 	idx = posmod(idx, DisplayServer.get_screen_count())
@@ -98,6 +84,7 @@ func _reset() -> void:
 	var size := _screen_size()
 	_sparkles.setup(_rng, size)
 	for g in _ghost_layer.get_children():
+		g.gone.disconnect(_on_ghost_gone)
 		g.queue_free()
 	for i in ghost_count:
 		_spawn()
@@ -105,11 +92,16 @@ func _reset() -> void:
 
 func _spawn() -> void:
 	var g := Ghost.new()
-	var img: Texture2D = null
-	if not _images.is_empty() and _rng.randf() < 0.5:
-		img = _images[_rng.randi() % _images.size()]
-	g.setup(_rng, _screen_size(), img)
+	g.setup(_rng, _screen_size())
+	g.gone.connect(_on_ghost_gone)
 	_ghost_layer.add_child(g)
+
+
+func _on_ghost_gone() -> void:
+	# Keep the population steady: something new appears a little later, elsewhere.
+	await get_tree().create_timer(_rng.randf_range(1.0, 6.0)).timeout
+	if _alive().size() < ghost_count:
+		_spawn()
 
 
 func _alive() -> Array:
