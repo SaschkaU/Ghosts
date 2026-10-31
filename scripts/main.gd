@@ -144,6 +144,7 @@ func _alive() -> Array:
 
 
 func _process(_delta: float) -> void:
+	_update_lit_rects()
 	# Keep ghosts from sitting on top of each other.
 	var gs := _alive()
 	for g in gs:
@@ -159,6 +160,27 @@ func _process(_delta: float) -> void:
 				var push := d.normalized() * (1.0 - d.length() / r)
 				a.avoid -= push
 				b.avoid += push
+
+
+## Tell the screen filter where the ghosts are, so it skips the black rest
+## of the screen (most of it). Sparkles and the help text are spread over
+## the whole screen, so while they show the filter does every pixel.
+func _update_lit_rects() -> void:
+	if not _filter.visible:
+		return
+	var mat := _filter.material as ShaderMaterial
+	var ghosts := _ghost_layer.get_children()
+	if _help.visible or S.i("sparkle_count") > 0 or ghosts.size() > 24:
+		mat.set_shader_parameter("lit_count", -1)
+		return
+	var pad := S.f("bloom_radius") * 2.3 + absf(S.f("aberration")) * 1.5 + 4.0
+	var rects := PackedVector4Array()
+	for g in ghosts:
+		var r: Rect2 = g.screen_rect().grow(pad)
+		rects.append(Vector4(r.position.x, r.position.y, r.end.x, r.end.y))
+	rects.resize(24)
+	mat.set_shader_parameter("lit_rects", rects)
+	mat.set_shader_parameter("lit_count", ghosts.size())
 
 
 func _is_fullscreen() -> bool:
