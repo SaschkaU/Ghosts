@@ -1,6 +1,6 @@
 # Ghosts
 
-A Godot 4 app for a projector: pitch-black fullscreen with chalky, softly glowing
+A Godot 4 app for a projector: pitch black with chalky, softly glowing
 ghosts that materialize, drift around and dissolve again. The head leads and the
 body follows like slow-motion cloth. Everything is drawn by shaders, so there are
 no sprite images to manage.
@@ -11,14 +11,15 @@ no sprite images to manage.
 
 1. Install Godot 4.5 (or newer 4.x) from <https://godotengine.org/download/macos/>.
 2. Open Godot, choose **Import**, and pick this folder's `project.godot`.
-3. Press **Run** (or F5). It opens fullscreen. If a projector is connected, it goes to
-   the last screen, which is usually the projector.
+3. Press **Run** (or F5). It opens in a normal window. Drag the window onto the
+   projector (or press `S`), then press `F` or double-click to go fullscreen: that
+   hides the title bar, window buttons, menu bar, Dock and mouse cursor.
 
 ### Keys
 
 | Key | Action |
 | --- | --- |
-| `F` | Toggle fullscreen |
+| `F` / double-click | Toggle fullscreen |
 | `S` | Move to the next screen |
 | `Up` / `Down` | Add / remove a ghost (they fade in and out) |
 | `P` | Spooky screen filter on / off |
