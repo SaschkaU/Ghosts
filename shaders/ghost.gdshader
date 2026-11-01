@@ -30,9 +30,9 @@ uniform float eye_size = 1.0;
 uniform float blush_amount = 0.9;
 uniform float outline = 1.0;           // pink chalk outline strength (0 = none)
 uniform float rainbow = 0.0;           // 0 = normal ghost, 1 = rainbow ghost
-uniform float rainbow_speed = 0.12;    // colour cycles per second
-uniform float rainbow_bands = 1.0;     // rainbows from head to hem
-uniform float rainbow_saturation = 0.6; // 0 = cream, 1 = full colour
+uniform float rainbow_speed = 1.0;     // colour cycles per second
+uniform float rainbow_bands = 0.5;     // rainbows from head to hem
+uniform float rainbow_saturation = 0.89; // 0 = cream, 1 = full colour
 
 uniform vec4 body_color : source_color = vec4(0.96, 0.93, 0.85, 1.0);
 uniform vec4 rim_color : source_color = vec4(0.82, 0.38, 0.55, 1.0);
