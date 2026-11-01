@@ -35,10 +35,10 @@ uniform float rainbow_speed = 1.0;     // colour cycles per second
 uniform float rainbow_bands = 0.5;     // rainbows from head to hem
 uniform float rainbow_saturation = 0.89; // 0 = cream, 1 = full colour
 uniform float valkyrie = 0.0;          // 0 = normal ghost, 1 = violet ghost with a V
-uniform float valkyrie_v_size = 0.26;  // V height, in ghost lengths
+uniform float valkyrie_v_size = 0.19;  // V height, in ghost lengths
 uniform float valkyrie_v_y = 0.39;     // V centre along the body: 0 = head, 1 = hem
-uniform float valkyrie_v_width = 0.8;  // how wide the V opens
-uniform float valkyrie_v_thickness = 0.26; // stroke weight, fraction of the V height
+uniform float valkyrie_v_width = 1.0;  // how wide the V opens
+uniform float valkyrie_v_thickness = 0.9; // stroke weight, fraction of the V height
 
 uniform vec4 body_color : source_color = vec4(0.96, 0.93, 0.85, 1.0);
 uniform vec4 rim_color : source_color = vec4(0.82, 0.38, 0.55, 1.0);
@@ -185,20 +185,39 @@ void fragment() {
 	vec3 col = base * (chalk - speck);
 	if (valkyrie > 0.0) {
 		// Body coordinates in ghost lengths (x across, y from head to hem), so the
-		// V bends and sways with the cloth. Flat-topped, pointed bottom.
+		// emblem bends and sways with the cloth. A winged V in the Valkyries'
+		// style: wings rising outward, cut by bridge cables fanning out from the
+		// top, and a sword down the middle.
 		vec2 vp = vec2(x_body * hw_mid, (s_body - valkyrie_v_y) * mid_len);
 		float vh = valkyrie_v_size;
-		float vw = 0.42 * vh * valkyrie_v_width;
+		float ax = abs(vp.x);
+		float vw = 0.5 * vh * valkyrie_v_width;
 		vec2 n = normalize(vec2(vh, vw));
-		float edge = dot(vec2(abs(vp.x), vp.y) - vec2(vw, -0.5 * vh), n);
+		float edge = dot(vec2(ax, vp.y) - vec2(vw, -0.5 * vh), n);
 		float tk = valkyrie_v_thickness * vh * 0.5;
-		float d_v = max(max(-0.5 * vh - vp.y, edge), -(edge + tk));
-		d_v += (vnoise(vp * 90.0) - 0.5) * 0.004;     // chalky edge, like the body
+		float arms = max(max(-0.5 * vh - 0.35 * ax - vp.y, edge), -(edge + tk));
+		// Cables: thin cuts fanning out from above the sword.
+		vec2 co = vec2(ax, vp.y + 0.75 * vh);
+		float cstep = 0.227;    // 13 degrees
+		float ck = atan(co.x, co.y) / cstep;
+		float cable = abs(fract(ck + 0.5) - 0.5) * cstep * length(co) - 0.016 * vh;
+		float arms_solid = arms;
+		arms = max(arms, -cable);
+		// Sword: pommel, crossguard and a blade that tapers to a point.
+		float blade = max(ax - 0.045 * vh * clamp((0.22 * vh - vp.y) / (0.2 * vh), 0.0, 1.0),
+				max(-0.62 * vh - vp.y, vp.y - 0.22 * vh));
+		float guard = max(ax - 0.16 * vh, abs(vp.y + 0.5 * vh) - 0.022 * vh);
+		float pommel = length(vp - vec2(0.0, -0.68 * vh)) - 0.04 * vh;
+		float sword = min(min(blade, guard), pommel);
+		arms = max(arms, -(sword - 0.035 * vh));
+		float chalk_v = (vnoise(vp * 90.0) - 0.5) * 0.002;   // chalky edge, like the body
+		float d_v = min(arms, sword) + chalk_v;
+		float d_sil = min(arms_solid, sword) + chalk_v;      // outline without the inner cuts
 		float v_aa = max(fwidth(d_v), 0.0012);
 		float v_in = 1.0 - smoothstep(-v_aa, v_aa, d_v);
-		float v_rim = 1.0 - smoothstep(-v_aa, v_aa, d_v - 0.006);
-		vec3 v_col = mix(valkyrie_v_edge.rgb, valkyrie_v_color.rgb * (0.9 + 0.1 * grain), v_in);
-		col = mix(col, v_col, v_rim * valkyrie);
+		float v_ring = smoothstep(-v_aa, v_aa, d_sil) * (1.0 - smoothstep(-v_aa, v_aa, d_sil - 0.005));
+		col = mix(col, valkyrie_v_edge.rgb, v_ring * valkyrie);
+		col = mix(col, valkyrie_v_color.rgb * (0.9 + 0.1 * grain), v_in * valkyrie);
 	}
 
 	// Soft pink shading inside the edge, then the chalk rim itself.
