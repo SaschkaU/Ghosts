@@ -178,6 +178,12 @@ const GROUPS = [
     ["glow", "Halo", 0, 2, 0.01],
     ["ghost_flicker", "Ghost flicker", 0, 0.6, 0.01],
   ]],
+  ["Rainbow ghost", true, [
+    ["rainbow_ghosts", "Rainbow ghosts", 0, 10, 1, "How many of the ghosts are rainbow-coloured."],
+    ["rainbow_speed", "Colour cycle speed", -3, 3, 0.01, "Rainbow cycles per second. Negative = the other way."],
+    ["rainbow_bands", "Rainbows head to hem", 0, 4, 0.05, "0 = whole body one colour, cycling."],
+    ["rainbow_saturation", "Colour strength", 0, 1, 0.01, "0 = cream, 1 = full colour."],
+  ]],
   ["Colours", false, [
     ["body_color", "Body", "color"], ["rim_color", "Outline", "color"], ["blush_color", "Blush", "color"],
     ["eye_color", "Eyes", "color"], ["glow_color", "Halo & dissolve", "color"], ["sparkle_color", "Sparkles", "color"],
@@ -419,16 +425,22 @@ class Ghost {
     set("cloth_speed", this.pick("cloth_speed")); set("cloth_amount", f("cloth_amount"));
     set("opacity", lerp(f("opacity_far"), f("opacity_near"), this.depth)); set("tail_fade", f("tail_fade")); set("glow", f("glow"));
     set("flicker", f("ghost_flicker")); set("eye_size", f("eye_size")); set("blush_amount", f("blush")); set("outline", f("outline"));
+    set("rainbow", this.rainbow ? 1 : 0); for (const k of ["rainbow_speed", "rainbow_bands", "rainbow_saturation"]) set(k, f(k));
     for (const c of ["body_color", "rim_color", "blush_color", "eye_color", "glow_color"]) gl.uniform4f(u(c), ...hex(S[c]), 1);
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
   }
 }
 const alive = () => ghosts.filter(g => !g.dying);
 function scheduleSpawn(delay) { pending.push(simTime + delay); }
-function spawnNow() { ghosts.push(new Ghost()); ghosts.sort((a, b) => a.depth - b.depth); }
+function spawnNow() { const g = new Ghost(); g.rainbow = alive().filter(o => o.rainbow).length < Math.round(f("rainbow_ghosts")); ghosts.push(g); ghosts.sort((a, b) => a.depth - b.depth); }
 function restart() {
   ghosts = []; pending = []; setupSparkles();
   for (let i = 0; i < Math.round(f("ghost_count")); i++) scheduleSpawn(i === 0 ? .3 : lerp(1, 1 + i * f("start_stagger"), Math.random()));
+}
+function assignRainbows() {
+  let want = Math.round(f("rainbow_ghosts"));
+  for (const g of alive()) if (g.rainbow && --want < 0) g.rainbow = false;
+  for (const g of alive()) if (want > 0 && !g.rainbow) { g.rainbow = true; want--; }
 }
 function syncCount() {
   const want = Math.round(f("ghost_count")), a = alive();
@@ -519,6 +531,7 @@ function onChange(key) {
   refreshRow(key);
   if (key.startsWith("sparkle_") && key !== "sparkle_color" && key !== "sparkle_speed") setupSparkles();
   if (key === "ghost_count") syncCount();
+  if (key === "rainbow_ghosts") assignRainbows();
   if (document.activeElement !== jsonEl) jsonEl.value = settingsJson();
   try { localStorage.setItem("ghost-tweaker-cloth", JSON.stringify(S)); } catch (e) {}
 }
@@ -533,7 +546,7 @@ document.getElementById("btnCopy").onclick = async () => {
 document.getElementById("btnApply").onclick = () => {
   const msg = document.getElementById("jsonMsg");
   try { const d = JSON.parse(jsonEl.value); let n = 0; for (const k in d) if (k in DEFAULTS) { S[k] = d[k]; n++; }
-    refreshAll(); setupSparkles(); syncCount(); msg.textContent = `Applied ${n} values.`; }
+    refreshAll(); setupSparkles(); syncCount(); assignRainbows(); msg.textContent = `Applied ${n} values.`; }
   catch (e) { msg.textContent = "That isn't valid JSON: " + e.message; }
 };
 document.getElementById("btnReset").onclick = () => { S = Object.assign({}, DEFAULTS); refreshAll(); restart(); toast("Back to the defaults"); };

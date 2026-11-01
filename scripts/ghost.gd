@@ -32,6 +32,7 @@ var avoid := Vector2.ZERO   # set by main.gd to keep ghosts apart
 var length_px := 300.0
 var area := Rect2()
 var dying := false
+var rainbow := false        # set by main.gd before setup(); see set_rainbow()
 
 var _depth := 0.5           # 0 = small & far, 1 = big & close
 var _noise := FastNoiseLite.new()
@@ -131,6 +132,15 @@ func apply_settings() -> void:
 	_mat.set_shader_parameter("outline", S.f("outline"))
 	for k in ["body_color", "rim_color", "blush_color", "eye_color", "glow_color"]:
 		_mat.set_shader_parameter(k, S.c(k))
+	for k in ["rainbow_speed", "rainbow_bands", "rainbow_saturation"]:
+		_mat.set_shader_parameter(k, S.f(k))
+	_mat.set_shader_parameter("rainbow", 1.0 if rainbow else 0.0)
+
+
+func set_rainbow(on: bool) -> void:
+	rainbow = on
+	if _mat:
+		_mat.set_shader_parameter("rainbow", 1.0 if on else 0.0)
 
 
 func vanish() -> void:
