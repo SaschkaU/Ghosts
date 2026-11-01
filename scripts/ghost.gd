@@ -34,6 +34,7 @@ var area := Rect2()
 var dying := false
 var rainbow := false        # set by main.gd before setup(); see set_rainbow()
 var valkyrie := false       # violet Valkyries ghost with a V; see set_valkyrie()
+var sequin := false         # covered in rainbow sequins; see set_sequin()
 
 var _depth := 0.5           # 0 = small & far, 1 = big & close
 var _noise := FastNoiseLite.new()
@@ -141,6 +142,11 @@ func apply_settings() -> void:
 	for k in ["valkyrie_color", "valkyrie_v_color", "valkyrie_v_edge"]:
 		_mat.set_shader_parameter(k, S.c(k))
 	_mat.set_shader_parameter("valkyrie", 1.0 if valkyrie else 0.0)
+	for k in ["sequin_size", "sequin_bands", "sequin_shuffle", "sequin_speed", "sequin_saturation",
+			"sequin_sparkle", "sequin_glint", "sequin_flip", "sequin_shimmer"]:
+		_mat.set_shader_parameter(k, S.f(k))
+	_mat.set_shader_parameter("sequin_gap", S.c("sequin_gap"))
+	_mat.set_shader_parameter("sequin", 1.0 if sequin else 0.0)
 
 
 func set_rainbow(on: bool) -> void:
@@ -153,6 +159,12 @@ func set_valkyrie(on: bool) -> void:
 	valkyrie = on
 	if _mat:
 		_mat.set_shader_parameter("valkyrie", 1.0 if on else 0.0)
+
+
+func set_sequin(on: bool) -> void:
+	sequin = on
+	if _mat:
+		_mat.set_shader_parameter("sequin", 1.0 if on else 0.0)
 
 
 func vanish() -> void:

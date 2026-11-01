@@ -75,6 +75,18 @@ const DEFAULTS := {
 	"valkyrie_v_y": 0.39,                        # V centre along the body: 0 = head, 1 = hem
 	"valkyrie_v_width": 1.0,                     # how wide the V opens
 	"valkyrie_v_thickness": 0.9,                 # stroke weight, fraction of the V height
+	# Sequin ghost (covered in rainbow sequins that flash as the cloth moves)
+	"sequin_ghosts": 1,                          # how many of the ghosts are sequin ghosts
+	"sequin_size": 0.032,                        # distance between sequins, ghost lengths
+	"sequin_bands": 1.2,                         # rainbows per ghost length, head to hem
+	"sequin_shuffle": 0.35,                      # 0 = neat rainbow bands, 1 = random confetti colours
+	"sequin_speed": 0.15,                        # colour drift, cycles per second
+	"sequin_saturation": 0.85,                   # 0 = silver, 1 = full colour
+	"sequin_sparkle": 1.0,                       # brightness of the flashes
+	"sequin_glint": 24.0,                        # higher = shorter, rarer flashes
+	"sequin_flip": 6.0,                          # how much the sequins tilt when the cloth swings and turns
+	"sequin_shimmer": 1.2,                       # how fast they wobble on their own
+	"sequin_gap": "#1f1429",                     # backing between the sequins
 	# Colours
 	"body_color": "#f5edd9",
 	"rim_color": "#d1618c",

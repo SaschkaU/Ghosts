@@ -9,6 +9,7 @@ const S := preload("res://scripts/settings.gd")
 const Ghost := preload("res://scripts/ghost.gd")
 const Sparkles := preload("res://scripts/sparkles.gd")
 const SCREEN_SHADER := preload("res://shaders/spooky_screen.gdshader")
+const SPECIALS := ["rainbow", "valkyrie", "sequin"]   # special ghost kinds, in priority order
 
 var ghost_count := 5
 
@@ -130,36 +131,38 @@ func _spawn_later(seconds: float) -> void:
 
 func _spawn() -> void:
 	var g := Ghost.new()
-	g.rainbow = _alive().filter(func(o): return o.rainbow).size() < S.i("rainbow_ghosts")
-	if not g.rainbow:
-		g.valkyrie = _alive().filter(func(o): return o.valkyrie).size() < S.i("valkyrie_ghosts")
+	# The first special kind still short of its count wins (rainbow, then
+	# Valkyries, then sequins); a ghost is only ever one of them.
+	for kind in SPECIALS:
+		if _alive().filter(func(o): return o.get(kind)).size() < S.i(kind + "_ghosts"):
+			g.set(kind, true)
+			break
 	g.setup(_rng, _screen_size())
 	g.gone.connect(_on_ghost_gone)
 	_ghost_layer.add_child(g)
 
 
-## Keep exactly `rainbow_ghosts` of the living ghosts rainbow-coloured and
-## `valkyrie_ghosts` violet with a V (after a settings reload changed the
-## numbers). A ghost is never both.
+## Keep exactly `rainbow_ghosts` of the living ghosts rainbow-coloured,
+## `valkyrie_ghosts` violet with a V and `sequin_ghosts` covered in sequins
+## (after a settings reload changed the numbers). A ghost is only ever one.
 func _assign_specials() -> void:
-	var want_r := S.i("rainbow_ghosts")
-	var want_v := S.i("valkyrie_ghosts")
+	var want := {}
+	for kind in SPECIALS:
+		want[kind] = S.i(kind + "_ghosts")
 	for g in _alive():
-		if g.rainbow:
-			want_r -= 1
-			if want_r < 0:
-				g.set_rainbow(false)
-		if g.valkyrie:
-			want_v -= 1
-			if want_v < 0:
-				g.set_valkyrie(false)
+		for kind in SPECIALS:
+			if g.get(kind):
+				want[kind] -= 1
+				if want[kind] < 0:
+					g.call("set_" + kind, false)
 	for g in _alive():
-		if want_r > 0 and not g.rainbow and not g.valkyrie:
-			g.set_rainbow(true)
-			want_r -= 1
-		elif want_v > 0 and not g.rainbow and not g.valkyrie:
-			g.set_valkyrie(true)
-			want_v -= 1
+		if SPECIALS.any(func(k): return g.get(k)):
+			continue
+		for kind in SPECIALS:
+			if want[kind] > 0:
+				g.call("set_" + kind, true)
+				want[kind] -= 1
+				break
 
 
 func _on_ghost_gone() -> void:
