@@ -307,8 +307,6 @@ void fragment() {
 	float ex = 0.043 * body_width;
 	float eyes = min(ellipse(hq, face + vec2(-ex, 0.0), eye_r),
 					 ellipse(hq, face + vec2(ex, 0.0), eye_r));
-	// Sequin ghost: a pale ring round each eye so the face reads on the sparkle.
-	col = mix(col, body_color.rgb, (1.0 - smoothstep(0.2, 0.38, eyes)) * sequin);
 	col = mix(col, eye_color.rgb, 1.0 - smoothstep(-0.15, 0.15, eyes));
 
 	vec2 bl_r = vec2(0.026, 0.017) * body_width;
