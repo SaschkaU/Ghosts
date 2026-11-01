@@ -4,6 +4,7 @@
 // shader draws the outline of that grid (left edge, hem, right edge) as a
 // smooth shape, with a scalloped hem, a dissolve for appearing/vanishing,
 // and the face on the head.
+// One ghost can be a rainbow ghost (see `rainbow`).
 // Look: chalky cream body, pink chalk rim, black oval eyes, scribbled blush.
 shader_type canvas_item;
 
@@ -28,6 +29,10 @@ uniform float flicker = 0.08;
 uniform float eye_size = 1.0;
 uniform float blush_amount = 0.9;
 uniform float outline = 1.0;           // pink chalk outline strength (0 = none)
+uniform float rainbow = 0.0;           // 0 = normal ghost, 1 = rainbow ghost
+uniform float rainbow_speed = 0.12;    // colour cycles per second
+uniform float rainbow_bands = 1.0;     // rainbows from head to hem
+uniform float rainbow_saturation = 0.6; // 0 = cream, 1 = full colour
 
 uniform vec4 body_color : source_color = vec4(0.96, 0.93, 0.85, 1.0);
 uniform vec4 rim_color : source_color = vec4(0.82, 0.38, 0.55, 1.0);
@@ -63,6 +68,11 @@ float fbm(vec2 p) {
 float smin(float a, float b, float k) {
 	float h = clamp(0.5 + 0.5 * (b - a) / k, 0.0, 1.0);
 	return mix(b, a, h) - k * h * (1.0 - h);
+}
+
+// Hue 0..1 to a pure rainbow colour.
+vec3 hue_rgb(float h) {
+	return clamp(abs(fract(h + vec3(0.0, 2.0 / 3.0, 1.0 / 3.0)) * 6.0 - 3.0) - 1.0, 0.0, 1.0);
 }
 
 float ellipse(vec2 p, vec2 c, vec2 r) {
@@ -152,7 +162,11 @@ void fragment() {
 	float streak = vnoise(vec2(x_body * 9.0, s_body * 90.0));
 	float chalk = 0.86 + 0.08 * grain + 0.06 * streak;
 	float speck = step(0.985, hash(floor(p * 380.0))) * 0.25;
-	vec3 col = body_color.rgb * (chalk - speck);
+	// Rainbow ghost: colour bands from head to hem that roll along the body over time.
+	vec3 rb = mix(vec3(1.0), hue_rgb(s_body * rainbow_bands + x_body * 0.06 - TIME * rainbow_speed + phase), rainbow_saturation);
+	vec3 base = mix(body_color.rgb, rb, rainbow);
+	vec3 glow_c = mix(glow_color.rgb, rb, rainbow);
+	vec3 col = base * (chalk - speck);
 
 	// Soft pink shading inside the edge, then the chalk rim itself.
 	col = mix(col, rim_color.rgb, smoothstep(-0.05, -0.012, d) * 0.18 * outline);
@@ -190,13 +204,13 @@ void fragment() {
 	alpha *= 0.86 + 0.14 * fbm(p * 5.0 + vec2(0.0, -t * 0.4));
 	alpha *= 1.0 - flicker * vnoise(vec2(TIME * 4.0 + phase * 13.0, phase));
 	float a_in = inside * alpha * pres;
-	col = mix(col, glow_color.rgb * 1.2, ecto * 0.7);
+	col = mix(col, glow_c * 1.2, ecto * 0.7);
 
 	// Halo outside the body.
 	float halo = exp(-max(d, 0.0) * 38.0) * glow * 0.35 * (1.0 - inside);
 	halo *= (1.0 - 0.6 * s_body) * (pres + ecto * 0.5);
 
 	float out_a = a_in + halo * (1.0 - a_in);
-	vec3 premul = col * a_in + glow_color.rgb * halo * (1.0 - a_in);
+	vec3 premul = col * a_in + glow_c * halo * (1.0 - a_in);
 	COLOR = vec4(premul / max(out_a, 0.0001), out_a * COLOR.a);
 }

@@ -61,6 +61,11 @@ const DEFAULTS := {
 	"eye_size": 2.5,
 	"blush": 1.0,
 	"outline": 0.0,                              # pink chalk outline strength (0 = none)
+	# Rainbow ghost
+	"rainbow_ghosts": 1,                         # how many of the ghosts are rainbow-coloured
+	"rainbow_speed": 0.12,                       # colour cycles per second
+	"rainbow_bands": 1.0,                        # rainbows from head to hem
+	"rainbow_saturation": 0.6,                   # 0 = cream, 1 = full colour
 	# Colours
 	"body_color": "#f5edd9",
 	"rim_color": "#d1618c",

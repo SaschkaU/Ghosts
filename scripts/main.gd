@@ -103,6 +103,7 @@ func _reload_settings() -> void:
 	_sparkles.setup(_rng, _screen_size())
 	for g in _alive():
 		g.apply_settings()
+	_assign_rainbows()
 	var gs := _alive()
 	while gs.size() > ghost_count:
 		gs.pop_back().vanish()
@@ -129,9 +130,25 @@ func _spawn_later(seconds: float) -> void:
 
 func _spawn() -> void:
 	var g := Ghost.new()
+	g.rainbow = _alive().filter(func(o): return o.rainbow).size() < S.i("rainbow_ghosts")
 	g.setup(_rng, _screen_size())
 	g.gone.connect(_on_ghost_gone)
 	_ghost_layer.add_child(g)
+
+
+## Keep exactly `rainbow_ghosts` of the living ghosts rainbow-coloured
+## (after a settings reload changed the number).
+func _assign_rainbows() -> void:
+	var want := S.i("rainbow_ghosts")
+	for g in _alive():
+		if g.rainbow:
+			want -= 1
+			if want < 0:
+				g.set_rainbow(false)
+	for g in _alive():
+		if want > 0 and not g.rainbow:
+			g.set_rainbow(true)
+			want -= 1
 
 
 func _on_ghost_gone() -> void:
