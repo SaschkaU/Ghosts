@@ -4,7 +4,8 @@
 // shader draws the outline of that grid (left edge, hem, right edge) as a
 // smooth shape, with a scalloped hem, a dissolve for appearing/vanishing,
 // and the face on the head.
-// One ghost can be a rainbow ghost (see `rainbow`).
+// One ghost can be a rainbow ghost (see `rainbow`), and one a violet
+// Valkyries ghost with a bold V on its body (see `valkyrie`).
 // Look: chalky cream body, pink chalk rim, black oval eyes, scribbled blush.
 shader_type canvas_item;
 
@@ -33,12 +34,20 @@ uniform float rainbow = 0.0;           // 0 = normal ghost, 1 = rainbow ghost
 uniform float rainbow_speed = 1.0;     // colour cycles per second
 uniform float rainbow_bands = 0.5;     // rainbows from head to hem
 uniform float rainbow_saturation = 0.89; // 0 = cream, 1 = full colour
+uniform float valkyrie = 0.0;          // 0 = normal ghost, 1 = violet ghost with a V
+uniform float valkyrie_v_size = 0.26;  // V height, in ghost lengths
+uniform float valkyrie_v_y = 0.36;     // V centre along the body: 0 = head, 1 = hem
+uniform float valkyrie_v_width = 1.0;  // how wide the V opens
+uniform float valkyrie_v_thickness = 0.36; // stroke weight, fraction of the V height
 
 uniform vec4 body_color : source_color = vec4(0.96, 0.93, 0.85, 1.0);
 uniform vec4 rim_color : source_color = vec4(0.82, 0.38, 0.55, 1.0);
 uniform vec4 blush_color : source_color = vec4(0.93, 0.55, 0.66, 1.0);
 uniform vec4 eye_color : source_color = vec4(0.04, 0.03, 0.04, 1.0);
 uniform vec4 glow_color : source_color = vec4(0.80, 0.78, 0.95, 1.0);
+uniform vec4 valkyrie_color : source_color = vec4(0.43, 0.25, 0.75, 1.0);
+uniform vec4 valkyrie_v_color : source_color = vec4(0.04, 0.03, 0.05, 1.0);
+uniform vec4 valkyrie_v_edge : source_color = vec4(0.79, 0.80, 0.84, 1.0);
 
 float hash(vec2 p) {
 	p = fract(p * vec2(123.34, 456.21));
@@ -113,6 +122,8 @@ void fragment() {
 	float d_mid = 1e5;
 	float s_body = 0.0;      // 0 at head centre, 1 at the hem
 	float x_body = 0.0;      // -1..1 across the body
+	float hw_mid = 0.1;      // half body width there, ghost lengths
+	float mid_len = 0.0;     // length of the middle column, ghost lengths
 	int mc = COLS / 2;
 	for (int r = 0; r < ROWS - 1; r++) {
 		vec2 a = cloth[r * COLS + mc];
@@ -120,13 +131,15 @@ void fragment() {
 		float h = clamp(dot(q - a, ab) / max(dot(ab, ab), 1e-8), 0.0, 1.0);
 		vec2 c = a + ab * h;
 		float dm = length(q - c);
+		mid_len += length(ab);
 		if (dm < d_mid) {
 			d_mid = dm;
 			s_body = (float(r) + h) / float(ROWS - 1);
 			float hw0 = 0.5 * length(cloth[r * COLS + COLS - 1] - cloth[r * COLS]);
 			float hw1 = 0.5 * length(cloth[(r + 1) * COLS + COLS - 1] - cloth[(r + 1) * COLS]);
 			vec2 tn = normalize(ab + vec2(1e-6));
-			x_body = dot(q - c, vec2(-tn.y, tn.x)) / max(mix(hw0, hw1, h), 1e-3);
+			hw_mid = max(mix(hw0, hw1, h), 1e-3);
+			x_body = dot(q - c, vec2(-tn.y, tn.x)) / hw_mid;
 		}
 	}
 
@@ -166,7 +179,27 @@ void fragment() {
 	vec3 rb = mix(vec3(1.0), hue_rgb(s_body * rainbow_bands + x_body * 0.06 - TIME * rainbow_speed + phase), rainbow_saturation);
 	vec3 base = mix(body_color.rgb, rb, rainbow);
 	vec3 glow_c = mix(glow_color.rgb, rb, rainbow);
+	// Valkyries ghost: violet body (and halo) with a V that rides on the cloth.
+	base = mix(base, valkyrie_color.rgb, valkyrie);
+	glow_c = mix(glow_c, mix(valkyrie_color.rgb, vec3(1.0), 0.35), valkyrie);
 	vec3 col = base * (chalk - speck);
+	if (valkyrie > 0.0) {
+		// Body coordinates in ghost lengths (x across, y from head to hem), so the
+		// V bends and sways with the cloth. Flat-topped, pointed bottom.
+		vec2 vp = vec2(x_body * hw_mid, (s_body - valkyrie_v_y) * mid_len);
+		float vh = valkyrie_v_size;
+		float vw = 0.42 * vh * valkyrie_v_width;
+		vec2 n = normalize(vec2(vh, vw));
+		float edge = dot(vec2(abs(vp.x), vp.y) - vec2(vw, -0.5 * vh), n);
+		float tk = valkyrie_v_thickness * vh * 0.5;
+		float d_v = max(max(-0.5 * vh - vp.y, edge), -(edge + tk));
+		d_v += (vnoise(vp * 90.0) - 0.5) * 0.004;     // chalky edge, like the body
+		float v_aa = max(fwidth(d_v), 0.0012);
+		float v_in = 1.0 - smoothstep(-v_aa, v_aa, d_v);
+		float v_rim = 1.0 - smoothstep(-v_aa, v_aa, d_v - 0.006);
+		vec3 v_col = mix(valkyrie_v_edge.rgb, valkyrie_v_color.rgb * (0.9 + 0.1 * grain), v_in);
+		col = mix(col, v_col, v_rim * valkyrie);
+	}
 
 	// Soft pink shading inside the edge, then the chalk rim itself.
 	col = mix(col, rim_color.rgb, smoothstep(-0.05, -0.012, d) * 0.18 * outline);

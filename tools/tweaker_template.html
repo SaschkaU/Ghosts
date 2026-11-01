@@ -184,6 +184,14 @@ const GROUPS = [
     ["rainbow_bands", "Rainbows head to hem", 0, 4, 0.05, "0 = whole body one colour, cycling."],
     ["rainbow_saturation", "Colour strength", 0, 1, 0.01, "0 = cream, 1 = full colour."],
   ]],
+  ["Valkyries ghost", true, [
+    ["valkyrie_ghosts", "Valkyries ghosts", 0, 10, 1, "How many of the ghosts are violet with a V."],
+    ["valkyrie_color", "Body violet", "color"], ["valkyrie_v_color", "V colour", "color"], ["valkyrie_v_edge", "V edge", "color"],
+    ["valkyrie_v_size", "V size", 0.05, 0.6, 0.01, "V height, in ghost lengths."],
+    ["valkyrie_v_y", "V position", 0, 1, 0.01, "Along the body: 0 = head, 1 = hem."],
+    ["valkyrie_v_width", "V width", 0.4, 2, 0.02, "How wide the V opens."],
+    ["valkyrie_v_thickness", "V stroke weight", 0.1, 0.9, 0.01],
+  ]],
   ["Colours", false, [
     ["body_color", "Body", "color"], ["rim_color", "Outline", "color"], ["blush_color", "Blush", "color"],
     ["eye_color", "Eyes", "color"], ["glow_color", "Halo & dissolve", "color"], ["sparkle_color", "Sparkles", "color"],
@@ -426,21 +434,24 @@ class Ghost {
     set("opacity", lerp(f("opacity_far"), f("opacity_near"), this.depth)); set("tail_fade", f("tail_fade")); set("glow", f("glow"));
     set("flicker", f("ghost_flicker")); set("eye_size", f("eye_size")); set("blush_amount", f("blush")); set("outline", f("outline"));
     set("rainbow", this.rainbow ? 1 : 0); for (const k of ["rainbow_speed", "rainbow_bands", "rainbow_saturation"]) set(k, f(k));
+    set("valkyrie", this.valkyrie ? 1 : 0); for (const k of ["valkyrie_v_size", "valkyrie_v_y", "valkyrie_v_width", "valkyrie_v_thickness"]) set(k, f(k));
+    for (const c of ["valkyrie_color", "valkyrie_v_color", "valkyrie_v_edge"]) gl.uniform4f(u(c), ...hex(S[c]), 1);
     for (const c of ["body_color", "rim_color", "blush_color", "eye_color", "glow_color"]) gl.uniform4f(u(c), ...hex(S[c]), 1);
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
   }
 }
 const alive = () => ghosts.filter(g => !g.dying);
 function scheduleSpawn(delay) { pending.push(simTime + delay); }
-function spawnNow() { const g = new Ghost(); g.rainbow = alive().filter(o => o.rainbow).length < Math.round(f("rainbow_ghosts")); ghosts.push(g); ghosts.sort((a, b) => a.depth - b.depth); }
+function spawnNow() { const g = new Ghost(); g.rainbow = alive().filter(o => o.rainbow).length < Math.round(f("rainbow_ghosts"));
+  if (!g.rainbow) g.valkyrie = alive().filter(o => o.valkyrie).length < Math.round(f("valkyrie_ghosts")); ghosts.push(g); ghosts.sort((a, b) => a.depth - b.depth); }
 function restart() {
   ghosts = []; pending = []; setupSparkles();
   for (let i = 0; i < Math.round(f("ghost_count")); i++) scheduleSpawn(i === 0 ? .3 : lerp(1, 1 + i * f("start_stagger"), Math.random()));
 }
-function assignRainbows() {
-  let want = Math.round(f("rainbow_ghosts"));
-  for (const g of alive()) if (g.rainbow && --want < 0) g.rainbow = false;
-  for (const g of alive()) if (want > 0 && !g.rainbow) { g.rainbow = true; want--; }
+function assignRainbows() {   // also the Valkyries ghosts; a ghost is never both
+  let want = Math.round(f("rainbow_ghosts")), wantV = Math.round(f("valkyrie_ghosts"));
+  for (const g of alive()) { if (g.rainbow && --want < 0) g.rainbow = false; if (g.valkyrie && --wantV < 0) g.valkyrie = false; }
+  for (const g of alive()) if (!g.rainbow && !g.valkyrie) { if (want > 0) { g.rainbow = true; want--; } else if (wantV > 0) { g.valkyrie = true; wantV--; } }
 }
 function syncCount() {
   const want = Math.round(f("ghost_count")), a = alive();
@@ -531,7 +542,7 @@ function onChange(key) {
   refreshRow(key);
   if (key.startsWith("sparkle_") && key !== "sparkle_color" && key !== "sparkle_speed") setupSparkles();
   if (key === "ghost_count") syncCount();
-  if (key === "rainbow_ghosts") assignRainbows();
+  if (key === "rainbow_ghosts" || key === "valkyrie_ghosts") assignRainbows();
   if (document.activeElement !== jsonEl) jsonEl.value = settingsJson();
   try { localStorage.setItem("ghost-tweaker-cloth", JSON.stringify(S)); } catch (e) {}
 }

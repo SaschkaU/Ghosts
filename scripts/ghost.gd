@@ -33,6 +33,7 @@ var length_px := 300.0
 var area := Rect2()
 var dying := false
 var rainbow := false        # set by main.gd before setup(); see set_rainbow()
+var valkyrie := false       # violet Valkyries ghost with a V; see set_valkyrie()
 
 var _depth := 0.5           # 0 = small & far, 1 = big & close
 var _noise := FastNoiseLite.new()
@@ -135,12 +136,23 @@ func apply_settings() -> void:
 	for k in ["rainbow_speed", "rainbow_bands", "rainbow_saturation"]:
 		_mat.set_shader_parameter(k, S.f(k))
 	_mat.set_shader_parameter("rainbow", 1.0 if rainbow else 0.0)
+	for k in ["valkyrie_v_size", "valkyrie_v_y", "valkyrie_v_width", "valkyrie_v_thickness"]:
+		_mat.set_shader_parameter(k, S.f(k))
+	for k in ["valkyrie_color", "valkyrie_v_color", "valkyrie_v_edge"]:
+		_mat.set_shader_parameter(k, S.c(k))
+	_mat.set_shader_parameter("valkyrie", 1.0 if valkyrie else 0.0)
 
 
 func set_rainbow(on: bool) -> void:
 	rainbow = on
 	if _mat:
 		_mat.set_shader_parameter("rainbow", 1.0 if on else 0.0)
+
+
+func set_valkyrie(on: bool) -> void:
+	valkyrie = on
+	if _mat:
+		_mat.set_shader_parameter("valkyrie", 1.0 if on else 0.0)
 
 
 func vanish() -> void:
