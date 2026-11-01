@@ -192,6 +192,19 @@ const GROUPS = [
     ["valkyrie_v_width", "V width", 0.4, 2, 0.02, "How wide the V opens."],
     ["valkyrie_v_thickness", "V stroke weight", 0.1, 0.9, 0.01],
   ]],
+  ["Sequin ghost", true, [
+    ["sequin_ghosts", "Sequin ghosts", 0, 10, 1, "How many of the ghosts are covered in rainbow sequins."],
+    ["sequin_size", "Sequin size", 0.012, 0.08, 0.001, "Distance between sequins, in ghost lengths."],
+    ["sequin_bands", "Rainbows head to hem", 0, 5, 0.05, "0 = all one colour."],
+    ["sequin_shuffle", "Colour mix", 0, 1, 0.01, "0 = neat rainbow bands, 1 = random confetti."],
+    ["sequin_speed", "Colour drift", -1, 1, 0.01, "Colour cycles per second."],
+    ["sequin_saturation", "Colour strength", 0, 1, 0.01, "0 = silver, 1 = full colour."],
+    ["sequin_sparkle", "Flash brightness", 0, 3, 0.05],
+    ["sequin_glint", "Flash sharpness", 2, 120, 1, "Higher = shorter, rarer flashes."],
+    ["sequin_flip", "Tilt with the cloth", 0, 20, 0.1, "How much the sequins flip when the body swings and turns."],
+    ["sequin_shimmer", "Shimmer speed", 0, 6, 0.05, "How fast they wobble on their own."],
+    ["sequin_gap", "Backing between sequins", "color"],
+  ]],
   ["Colours", false, [
     ["body_color", "Body", "color"], ["rim_color", "Outline", "color"], ["blush_color", "Blush", "color"],
     ["eye_color", "Eyes", "color"], ["glow_color", "Halo & dissolve", "color"], ["sparkle_color", "Sparkles", "color"],
@@ -436,22 +449,26 @@ class Ghost {
     set("rainbow", this.rainbow ? 1 : 0); for (const k of ["rainbow_speed", "rainbow_bands", "rainbow_saturation"]) set(k, f(k));
     set("valkyrie", this.valkyrie ? 1 : 0); for (const k of ["valkyrie_v_size", "valkyrie_v_y", "valkyrie_v_width", "valkyrie_v_thickness"]) set(k, f(k));
     for (const c of ["valkyrie_color", "valkyrie_v_color", "valkyrie_v_edge"]) gl.uniform4f(u(c), ...hex(S[c]), 1);
+    set("sequin", this.sequin ? 1 : 0); for (const k of ["sequin_size", "sequin_bands", "sequin_shuffle", "sequin_speed", "sequin_saturation", "sequin_sparkle", "sequin_glint", "sequin_flip", "sequin_shimmer"]) set(k, f(k));
+    gl.uniform4f(u("sequin_gap"), ...hex(S.sequin_gap), 1);
     for (const c of ["body_color", "rim_color", "blush_color", "eye_color", "glow_color"]) gl.uniform4f(u(c), ...hex(S[c]), 1);
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
   }
 }
 const alive = () => ghosts.filter(g => !g.dying);
 function scheduleSpawn(delay) { pending.push(simTime + delay); }
-function spawnNow() { const g = new Ghost(); g.rainbow = alive().filter(o => o.rainbow).length < Math.round(f("rainbow_ghosts"));
-  if (!g.rainbow) g.valkyrie = alive().filter(o => o.valkyrie).length < Math.round(f("valkyrie_ghosts")); ghosts.push(g); ghosts.sort((a, b) => a.depth - b.depth); }
+const SPECIALS = ["rainbow", "valkyrie", "sequin"];   // special ghost kinds, in priority order; a ghost is only ever one
+function spawnNow() { const g = new Ghost();
+  for (const k of SPECIALS) if (alive().filter(o => o[k]).length < Math.round(f(k + "_ghosts"))) { g[k] = true; break; }
+  ghosts.push(g); ghosts.sort((a, b) => a.depth - b.depth); }
 function restart() {
   ghosts = []; pending = []; setupSparkles();
   for (let i = 0; i < Math.round(f("ghost_count")); i++) scheduleSpawn(i === 0 ? .3 : lerp(1, 1 + i * f("start_stagger"), Math.random()));
 }
-function assignRainbows() {   // also the Valkyries ghosts; a ghost is never both
-  let want = Math.round(f("rainbow_ghosts")), wantV = Math.round(f("valkyrie_ghosts"));
-  for (const g of alive()) { if (g.rainbow && --want < 0) g.rainbow = false; if (g.valkyrie && --wantV < 0) g.valkyrie = false; }
-  for (const g of alive()) if (!g.rainbow && !g.valkyrie) { if (want > 0) { g.rainbow = true; want--; } else if (wantV > 0) { g.valkyrie = true; wantV--; } }
+function assignRainbows() {   // all the special kinds (rainbow, Valkyries, sequins)
+  const want = {}; for (const k of SPECIALS) want[k] = Math.round(f(k + "_ghosts"));
+  for (const g of alive()) for (const k of SPECIALS) if (g[k] && --want[k] < 0) g[k] = false;
+  for (const g of alive()) if (!SPECIALS.some(k => g[k])) for (const k of SPECIALS) if (want[k] > 0) { g[k] = true; want[k]--; break; }
 }
 function syncCount() {
   const want = Math.round(f("ghost_count")), a = alive();
@@ -542,7 +559,7 @@ function onChange(key) {
   refreshRow(key);
   if (key.startsWith("sparkle_") && key !== "sparkle_color" && key !== "sparkle_speed") setupSparkles();
   if (key === "ghost_count") syncCount();
-  if (key === "rainbow_ghosts" || key === "valkyrie_ghosts") assignRainbows();
+  if (key === "rainbow_ghosts" || key === "valkyrie_ghosts" || key === "sequin_ghosts") assignRainbows();
   if (document.activeElement !== jsonEl) jsonEl.value = settingsJson();
   try { localStorage.setItem("ghost-tweaker-cloth", JSON.stringify(S)); } catch (e) {}
 }

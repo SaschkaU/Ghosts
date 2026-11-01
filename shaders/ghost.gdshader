@@ -4,8 +4,9 @@
 // shader draws the outline of that grid (left edge, hem, right edge) as a
 // smooth shape, with a scalloped hem, a dissolve for appearing/vanishing,
 // and the face on the head.
-// One ghost can be a rainbow ghost (see `rainbow`), and one a violet
-// Valkyries ghost with a bold V on its body (see `valkyrie`).
+// One ghost can be a rainbow ghost (see `rainbow`), one a violet
+// Valkyries ghost with a bold V on its body (see `valkyrie`), and one
+// covered in rainbow sequins that flash as the cloth moves (see `sequin`).
 // Look: chalky cream body, pink chalk rim, black oval eyes, scribbled blush.
 shader_type canvas_item;
 
@@ -39,6 +40,16 @@ uniform float valkyrie_v_size = 0.19;  // V height, in ghost lengths
 uniform float valkyrie_v_y = 0.39;     // V centre along the body: 0 = head, 1 = hem
 uniform float valkyrie_v_width = 1.0;  // how wide the V opens
 uniform float valkyrie_v_thickness = 0.9; // stroke weight, fraction of the V height
+uniform float sequin = 0.0;            // 0 = normal ghost, 1 = covered in rainbow sequins
+uniform float sequin_size = 0.032;     // distance between sequins, ghost lengths
+uniform float sequin_bands = 1.2;      // rainbows per ghost length, head to hem
+uniform float sequin_shuffle = 0.35;   // 0 = neat rainbow bands, 1 = random confetti colours
+uniform float sequin_speed = 0.15;     // colour drift, cycles per second
+uniform float sequin_saturation = 0.85; // 0 = silver, 1 = full colour
+uniform float sequin_sparkle = 1.0;    // brightness of the flashes
+uniform float sequin_glint = 24.0;     // higher = shorter, rarer flashes
+uniform float sequin_flip = 6.0;       // how much the sequins tilt when the cloth swings and turns
+uniform float sequin_shimmer = 1.2;    // how fast they wobble on their own
 
 uniform vec4 body_color : source_color = vec4(0.96, 0.93, 0.85, 1.0);
 uniform vec4 rim_color : source_color = vec4(0.82, 0.38, 0.55, 1.0);
@@ -48,6 +59,7 @@ uniform vec4 glow_color : source_color = vec4(0.80, 0.78, 0.95, 1.0);
 uniform vec4 valkyrie_color : source_color = vec4(0.43, 0.34, 0.88, 1.0);
 uniform vec4 valkyrie_v_color : source_color = vec4(1.0, 1.0, 1.0, 1.0);
 uniform vec4 valkyrie_v_edge : source_color = vec4(0.79, 0.80, 0.84, 1.0);
+uniform vec4 sequin_gap : source_color = vec4(0.12, 0.08, 0.16, 1.0);
 
 float hash(vec2 p) {
 	p = fract(p * vec2(123.34, 456.21));
@@ -125,6 +137,8 @@ void fragment() {
 	float hw_mid = 0.1;      // half body width there, ghost lengths
 	float mid_len = 0.0;     // length of the middle column, ghost lengths
 	int mc = COLS / 2;
+	int r_mid = 0;           // nearest middle-column segment, and where along it
+	float h_mid = 0.0;
 	for (int r = 0; r < ROWS - 1; r++) {
 		vec2 a = cloth[r * COLS + mc];
 		vec2 ab = cloth[(r + 1) * COLS + mc] - a;
@@ -134,6 +148,8 @@ void fragment() {
 		mid_len += length(ab);
 		if (dm < d_mid) {
 			d_mid = dm;
+			r_mid = r;
+			h_mid = h;
 			s_body = (float(r) + h) / float(ROWS - 1);
 			float hw0 = 0.5 * length(cloth[r * COLS + COLS - 1] - cloth[r * COLS]);
 			float hw1 = 0.5 * length(cloth[(r + 1) * COLS + COLS - 1] - cloth[(r + 1) * COLS]);
@@ -219,6 +235,61 @@ void fragment() {
 		col = mix(col, valkyrie_v_edge.rgb, v_ring * valkyrie);
 		col = mix(col, valkyrie_v_color.rgb * (0.9 + 0.1 * grain), v_in * valkyrie);
 	}
+	float seq_flash = 0.0;
+	if (sequin > 0.0) {
+		// Rainbow sequins sewn onto the cloth: a hex grid in body coordinates
+		// (the head's own frame on the head), so they ride and sway with the fabric.
+		// Along the nearest middle-column segment, extended past the head and
+		// the hem so the grid carries on smoothly there instead of smearing.
+		vec2 sa = cloth[r_mid * COLS + mc];
+		vec2 sab = cloth[(r_mid + 1) * COLS + mc] - sa;
+		float hu = dot(q - sa, sab) / max(dot(sab, sab), 1e-8);
+		hu = clamp(hu, r_mid == 0 ? -4.0 : 0.0, r_mid == ROWS - 2 ? 4.0 : 1.0);
+		vec2 sn = normalize(sab + 1e-6);
+		float across_d = dot(q - sa - sab * hu, vec2(-sn.y, sn.x));
+		vec2 sp = vec2(across_d, (float(r_mid) + hu) / float(ROWS - 1) * mid_len) / sequin_size;
+		vec2 hx = vec2(1.0, 1.7320508);
+		vec2 ga = mod(sp, hx) - 0.5 * hx;
+		vec2 gb = mod(sp - 0.5 * hx, hx) - 0.5 * hx;
+		vec2 gv = dot(ga, ga) < dot(gb, gb) ? ga : gb;   // offset from the sequin centre
+		vec2 id = floor((sp - gv) / (0.5 * hx) + 0.5);
+		float h1 = hash(id * 0.0731 + 0.17);
+		float h2 = hash(id * 0.0519 + 3.7);
+		float h3 = hash(id * 0.0913 + 7.1);
+
+		// Direction the cloth runs here, smoothed across the grid rows.
+		vec2 t1 = cloth[(r_mid + 1) * COLS + mc] - cloth[r_mid * COLS + mc];
+		vec2 t0 = r_mid > 0 ? cloth[r_mid * COLS + mc] - cloth[(r_mid - 1) * COLS + mc] : t1;
+		vec2 t2 = r_mid < ROWS - 2 ? cloth[(r_mid + 2) * COLS + mc] - cloth[(r_mid + 1) * COLS + mc] : t1;
+		t0 = normalize(t0 + 1e-6); t1 = normalize(t1 + 1e-6); t2 = normalize(t2 + 1e-6);
+		vec2 bt = h_mid < 0.5 ? mix(normalize(t0 + t1 + 1e-6), t1, h_mid * 2.0)
+				: mix(t1, normalize(t1 + t2 + 1e-6), h_mid * 2.0 - 1.0);
+		vec2 sf = vec2(cos(head_angle), sin(head_angle));
+		float bend = atan(-sf.x * bt.y + sf.y * bt.x, -dot(sf, bt));   // swing away from hanging straight
+		float across = across_d / hw_mid;                              // round body: sides face away
+
+		// Each sequin hangs at its own tilt; when the cloth swings, bends or turns
+		// they flip through the light one after another, and wobble a little.
+		float ang = h1 * 6.2832 + sequin_flip * (bend + 0.35 * head_angle) + 1.2 * across
+				+ 0.5 * sin(TIME * sequin_shimmer * (0.6 + 0.8 * h2) + h3 * 6.2832);
+		float glint = pow(max(cos(ang), 0.0), sequin_glint) * sequin_sparkle;
+
+		float rr = length(gv);
+		float s_aa = max(fwidth(rr), 0.02);
+		float disc = 1.0 - smoothstep(0.46 - s_aa, 0.46 + s_aa, rr);
+		float hue = (sp.y - gv.y) * sequin_size * sequin_bands + sequin_shuffle * h2 - TIME * sequin_speed + phase;
+		vec3 sc = mix(vec3(1.0), hue_rgb(hue), sequin_saturation);
+		// Metallic: brighter or darker as it tilts, a little darker towards the edge.
+		vec3 seq = sc * (0.45 + 0.35 * (0.5 + 0.5 * cos(ang - 1.3))) * (1.0 - 0.3 * smoothstep(0.15, 0.46, rr));
+		seq = mix(seq, vec3(1.0), clamp(glint, 0.0, 1.0) * 0.7) + sc * glint * 0.4;
+		// A tiny four-point star on the strongest flashes.
+		float star = (exp(-abs(gv.x) * 40.0 - abs(gv.y) * 5.0) + exp(-abs(gv.y) * 40.0 - abs(gv.x) * 5.0))
+				* smoothstep(0.5, 1.0, glint);
+		vec3 gap = sequin_gap.rgb * (0.7 + 0.3 * grain);
+		col = mix(col, mix(gap, seq, disc) + star, sequin);
+		seq_flash = clamp(glint * disc + star, 0.0, 1.0) * sequin;
+		glow_c = mix(glow_c, mix(hue_rgb(-TIME * sequin_speed + phase), vec3(1.0), 0.45), sequin);
+	}
 
 	// Soft pink shading inside the edge, then the chalk rim itself.
 	col = mix(col, rim_color.rgb, smoothstep(-0.05, -0.012, d) * 0.18 * outline);
@@ -236,6 +307,8 @@ void fragment() {
 	float ex = 0.043 * body_width;
 	float eyes = min(ellipse(hq, face + vec2(-ex, 0.0), eye_r),
 					 ellipse(hq, face + vec2(ex, 0.0), eye_r));
+	// Sequin ghost: a pale ring round each eye so the face reads on the sparkle.
+	col = mix(col, body_color.rgb, (1.0 - smoothstep(0.2, 0.38, eyes)) * sequin);
 	col = mix(col, eye_color.rgb, 1.0 - smoothstep(-0.15, 0.15, eyes));
 
 	vec2 bl_r = vec2(0.026, 0.017) * body_width;
@@ -256,6 +329,7 @@ void fragment() {
 	alpha *= 0.86 + 0.14 * fbm(p * 5.0 + vec2(0.0, -t * 0.4));
 	alpha *= 1.0 - flicker * vnoise(vec2(TIME * 4.0 + phase * 13.0, phase));
 	float a_in = inside * alpha * pres;
+	a_in = max(a_in, inside * pres * seq_flash);   // flashes stay bright even where the ghost is see-through
 	col = mix(col, glow_c * 1.2, ecto * 0.7);
 
 	// Halo outside the body.
