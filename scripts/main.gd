@@ -103,7 +103,7 @@ func _reload_settings() -> void:
 	_sparkles.setup(_rng, _screen_size())
 	for g in _alive():
 		g.apply_settings()
-	_assign_rainbows()
+	_assign_specials()
 	var gs := _alive()
 	while gs.size() > ghost_count:
 		gs.pop_back().vanish()
@@ -131,24 +131,35 @@ func _spawn_later(seconds: float) -> void:
 func _spawn() -> void:
 	var g := Ghost.new()
 	g.rainbow = _alive().filter(func(o): return o.rainbow).size() < S.i("rainbow_ghosts")
+	if not g.rainbow:
+		g.valkyrie = _alive().filter(func(o): return o.valkyrie).size() < S.i("valkyrie_ghosts")
 	g.setup(_rng, _screen_size())
 	g.gone.connect(_on_ghost_gone)
 	_ghost_layer.add_child(g)
 
 
-## Keep exactly `rainbow_ghosts` of the living ghosts rainbow-coloured
-## (after a settings reload changed the number).
-func _assign_rainbows() -> void:
-	var want := S.i("rainbow_ghosts")
+## Keep exactly `rainbow_ghosts` of the living ghosts rainbow-coloured and
+## `valkyrie_ghosts` violet with a V (after a settings reload changed the
+## numbers). A ghost is never both.
+func _assign_specials() -> void:
+	var want_r := S.i("rainbow_ghosts")
+	var want_v := S.i("valkyrie_ghosts")
 	for g in _alive():
 		if g.rainbow:
-			want -= 1
-			if want < 0:
+			want_r -= 1
+			if want_r < 0:
 				g.set_rainbow(false)
+		if g.valkyrie:
+			want_v -= 1
+			if want_v < 0:
+				g.set_valkyrie(false)
 	for g in _alive():
-		if want > 0 and not g.rainbow:
+		if want_r > 0 and not g.rainbow and not g.valkyrie:
 			g.set_rainbow(true)
-			want -= 1
+			want_r -= 1
+		elif want_v > 0 and not g.rainbow and not g.valkyrie:
+			g.set_valkyrie(true)
+			want_v -= 1
 
 
 func _on_ghost_gone() -> void:
