@@ -35,10 +35,10 @@ uniform float rainbow_speed = 1.0;     // colour cycles per second
 uniform float rainbow_bands = 0.5;     // rainbows from head to hem
 uniform float rainbow_saturation = 0.89; // 0 = cream, 1 = full colour
 uniform float valkyrie = 0.0;          // 0 = normal ghost, 1 = violet ghost with a V
-uniform float valkyrie_v_size = 0.26;  // V height, in ghost lengths
+uniform float valkyrie_v_size = 0.19;  // V height, in ghost lengths
 uniform float valkyrie_v_y = 0.39;     // V centre along the body: 0 = head, 1 = hem
-uniform float valkyrie_v_width = 0.8;  // how wide the V opens
-uniform float valkyrie_v_thickness = 0.36; // stroke weight, fraction of the V height
+uniform float valkyrie_v_width = 1.0;  // how wide the V opens
+uniform float valkyrie_v_thickness = 0.9; // stroke weight, fraction of the V height
 
 uniform vec4 body_color : source_color = vec4(0.96, 0.93, 0.85, 1.0);
 uniform vec4 rim_color : source_color = vec4(0.82, 0.38, 0.55, 1.0);

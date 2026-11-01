@@ -71,10 +71,10 @@ const DEFAULTS := {
 	"valkyrie_color": "#6d57e1",                 # body violet
 	"valkyrie_v_color": "#ffffff",               # the V
 	"valkyrie_v_edge": "#c9ccd6",                # thin edge around the V
-	"valkyrie_v_size": 0.26,                     # V height, in ghost lengths
+	"valkyrie_v_size": 0.19,                     # V height, in ghost lengths
 	"valkyrie_v_y": 0.39,                        # V centre along the body: 0 = head, 1 = hem
-	"valkyrie_v_width": 0.8,                     # how wide the V opens
-	"valkyrie_v_thickness": 0.36,                 # stroke weight, fraction of the V height
+	"valkyrie_v_width": 1.0,                     # how wide the V opens
+	"valkyrie_v_thickness": 0.9,                 # stroke weight, fraction of the V height
 	# Colours
 	"body_color": "#f5edd9",
 	"rim_color": "#d1618c",
