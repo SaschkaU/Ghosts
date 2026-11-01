@@ -36,17 +36,17 @@ uniform float rainbow_bands = 0.5;     // rainbows from head to hem
 uniform float rainbow_saturation = 0.89; // 0 = cream, 1 = full colour
 uniform float valkyrie = 0.0;          // 0 = normal ghost, 1 = violet ghost with a V
 uniform float valkyrie_v_size = 0.26;  // V height, in ghost lengths
-uniform float valkyrie_v_y = 0.36;     // V centre along the body: 0 = head, 1 = hem
-uniform float valkyrie_v_width = 1.0;  // how wide the V opens
-uniform float valkyrie_v_thickness = 0.36; // stroke weight, fraction of the V height
+uniform float valkyrie_v_y = 0.39;     // V centre along the body: 0 = head, 1 = hem
+uniform float valkyrie_v_width = 0.8;  // how wide the V opens
+uniform float valkyrie_v_thickness = 0.26; // stroke weight, fraction of the V height
 
 uniform vec4 body_color : source_color = vec4(0.96, 0.93, 0.85, 1.0);
 uniform vec4 rim_color : source_color = vec4(0.82, 0.38, 0.55, 1.0);
 uniform vec4 blush_color : source_color = vec4(0.93, 0.55, 0.66, 1.0);
 uniform vec4 eye_color : source_color = vec4(0.04, 0.03, 0.04, 1.0);
 uniform vec4 glow_color : source_color = vec4(0.80, 0.78, 0.95, 1.0);
-uniform vec4 valkyrie_color : source_color = vec4(0.43, 0.25, 0.75, 1.0);
-uniform vec4 valkyrie_v_color : source_color = vec4(0.04, 0.03, 0.05, 1.0);
+uniform vec4 valkyrie_color : source_color = vec4(0.43, 0.34, 0.88, 1.0);
+uniform vec4 valkyrie_v_color : source_color = vec4(1.0, 1.0, 1.0, 1.0);
 uniform vec4 valkyrie_v_edge : source_color = vec4(0.79, 0.80, 0.84, 1.0);
 
 float hash(vec2 p) {
