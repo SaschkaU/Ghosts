@@ -74,7 +74,7 @@ const DEFAULTS := {
 	"valkyrie_v_size": 0.26,                     # V height, in ghost lengths
 	"valkyrie_v_y": 0.39,                        # V centre along the body: 0 = head, 1 = hem
 	"valkyrie_v_width": 0.8,                     # how wide the V opens
-	"valkyrie_v_thickness": 0.26,                 # stroke weight, fraction of the V height
+	"valkyrie_v_thickness": 0.36,                 # stroke weight, fraction of the V height
 	# Colours
 	"body_color": "#f5edd9",
 	"rim_color": "#d1618c",
